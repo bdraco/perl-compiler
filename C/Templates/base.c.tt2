@@ -1,0 +1,955 @@
+/* [% creator %] */
+
+[% IF debug.flags AND DEBUG_LEAKING_SCALARS %]
+#define DEBUG_LEAKING_SCALARS 1
+[% END %]
+
+[% IF have_independent_comalloc %]
+#ifdef NEED_MALLOC_283
+# include "malloc-2.8.3.h"
+#endif
+[% END %]
+
+#define CopSTASHPVN_set(c,pv, len, flags)    CopSTASH_set((c), gv_stashpvn(pv,len,flags|GV_ADD))
+
+#define PERL_CORE /* Needed for some extensions perl core refeses to export (win32 only)*/
+#include "EXTERN.h" /* Embedded interface */
+#include "perl.h"   /* API interface */
+#include "XSUB.h"   /* XS interface */
+
+/* Workaround for mapstart: the only op which needs a different ppaddr */
+#undef Perl_pp_mapstart
+#define Perl_pp_mapstart Perl_pp_grepstart
+#undef OP_MAPSTART
+#define OP_MAPSTART OP_GREPSTART
+
+#ifdef BROKEN_STATIC_REDECL
+#define Static extern
+#else
+#define Static static
+#endif /* BROKEN_STATIC_REDECL */
+
+#ifdef BROKEN_UNION_INIT
+#error BROKEN_UNION_INIT no longer needed, as Perl requires an ANSI compiler
+#endif
+
+/* TODO: Why was this removed from perl core? */
+/* No longer available when C<PERL_CORE> is defined. */
+#ifndef Nullsv
+#  define Null(type) ((type)NULL)
+#  define Nullsv Null(SV*)
+#  define Nullhv Null(HV*)
+#  define Nullgv Null(GV*)
+#  define Nullop Null(OP*)
+#endif
+#ifndef GV_NOTQUAL
+#  define GV_NOTQUAL 0
+#endif
+/* Since 5.8.8 */
+#ifndef Newx
+#  define Newx(v,n,t)    New(0,v,n,t)
+#endif
+/* Since 5.14 */
+#if !defined(PERL_STATIC_INLINE)
+#  ifdef HAS_STATIC_INLINE
+#    define PERL_STATIC_INLINE static inline
+#  else
+#    define PERL_STATIC_INLINE static
+#  endif
+#endif
+
+#define XS_DynaLoader_boot_DynaLoader boot_DynaLoader
+EXTERN_C void boot_DynaLoader (pTHX_ CV* cv);
+
+static void xs_init (pTHX);
+static void dl_init (pTHX);
+
+[% IF av_init2 AND use_declare_independent_comalloc %]
+void** dlindependent_comalloc(size_t, size_t*, void**);
+[% END %]
+
+[% IF ! destruct %]
+static int fast_perl_destruct( PerlInterpreter *my_perl );
+static void my_curse( pTHX_ SV* const sv );
+
+/* TODO: Not provided in perl core? */
+#ifndef dVAR
+# ifdef PERL_GLOBAL_STRUCT
+#  define dVAR		pVAR    = (struct perl_vars*)PERL_GET_VARS()
+# else
+#  define dVAR		dNOOP
+# endif
+#endif
+[% ELSE %]
+int my_perl_destruct( PerlInterpreter *my_perl );
+[% END %]
+
+[%# Add static modules like " Win32CORE". This data comes from $Config{static_ext} %]
+[% FOREACH xsub IN stashxsubs %]
+EXTERN_C void boot_[% xsub %] (pTHX_ CV* cv);
+[% END %]
+
+/************************************************************************************************************
+*
+*       output_all()
+*
+*************************************************************************************************************/
+
+[% IF verbose AND section.sym.comment() %]
+    /* [% section.sym.comment() %] */
+[% END %]
+[% section.sym.output( "#define %s\n" ) %]
+
+/*  output_declarations() called by output_all() */
+
+#define UNUSED 0
+#define sym_0 0
+
+PERL_STATIC_INLINE HEK *
+my_share_hek( pTHX_ const char *str, I32 len, register U32 hash );
+#undef share_hek
+#define share_hek(str, len, hash) my_share_hek( aTHX_ str, len, hash );
+
+/* unfortunately we have to override this perl5.22 struct.
+   The Padname string buffer in xpadn_str is pointed by xpadn_pv.
+*/
+#define _PADNAME_BASE \
+    char *     xpadn_pv;               \
+    HV *       xpadn_ourstash;         \
+    union {                            \
+       HV *    xpadn_typestash;        \
+       CV *    xpadn_protocv;          \
+    } xpadn_type_u;                    \
+    U32                xpadn_low;              \
+    U32                xpadn_high;             \
+    U32                xpadn_refcnt;           \
+    int                xpadn_gen;              \
+    U8         xpadn_len;              \
+    U8         xpadn_flags
+
+struct my_padname_with_str {
+#ifdef PERL_PADNAME_MINIMAL
+    _PADNAME_BASE;
+#else
+    struct padname     xpadn_padname;
+#endif
+    char               xpadn_str[60]; /* longer lexical upval names are forbidden for now */
+};
+typedef struct my_padname_with_str MyPADNAME;
+
+/*
+    Tricky hack for -fcog since 5.10 on !c99 compilers required. We need a char* as
+    *first* sv_u element to be able to statically initialize it. A int does not allow it.
+    gcc error: initializer element is not computable at load time
+    We introduce a SVPV as SV.
+    In core since 5.12
+*/
+
+typedef struct p5rx RE;
+Static IV PL_sv_objcount = 0; /* deprecated with 5.21.1 but still needed and used */
+SV* sv;
+[% IF gv_index %]
+Static GV *gv_list[[% gv_index %]];
+[% END %]
+
+/* back in output_all() */
+
+[% FOREACH sect IN section_list %]
+[% lines = section.$sect.index + 1 %]
+[% NEXT IF lines == 0 %]
+Static [% section.$sect.typename() %] [% section.$sect.name() %]_list[[% lines %]];
+[% END %]
+
+/* hack for when Perl accesses PVX of GVs */
+Static const char emptystring[] = "\0";
+
+/* newXS for core XS needs a filename */
+Static const char xsfile[] = "universal.c";
+
+[% IF MULTI %]
+#define ptr_undef 0
+[% ELSE %]
+#define ptr_undef NULL
+#undef CopFILE_set
+#define CopFILE_set(c,pv)  CopFILEGV_set((c), gv_fetchfile(pv))
+[% END %]
+
+/* PadlistNAMES broken as lvalue with v5.21.6-197-g0f94cb1,
+    fixed with 5.22.1 and 5.23.0 by commit 73949fca08
+TODO: REMOVE ME after 5.22.1 or 5.23.0 is released. */
+#undef PadlistNAMES
+#define PadlistNAMES(pl)       *((PADNAMELIST **)PadlistARRAY(pl))
+
+[% IF init2_remap.size and !HAVE_DLFCN_DLOPEN %]
+XS(XS_DynaLoader_dl_load_file);
+XS(XS_DynaLoader_dl_find_symbol);
+[% END %]
+
+[% IF verbose AND section.decl.comment() %]
+    /* [% section.decl.comment() %] */
+[% END %]
+/* <decl.output> */
+[% section.decl.output( "%s\n" ) %]
+/* </decl.output> */
+
+[% IF devel_peek_needed %]
+static void
+S_do_dump(pTHX_ SV *const sv, I32 lim)
+{
+    dVAR;
+    SV *pv_lim_sv = get_sv("Devel::Peek::pv_limit", 0);
+    const STRLEN pv_lim = pv_lim_sv ? SvIV(pv_lim_sv) : 0;
+    SV *dumpop = get_sv("Devel::Peek::dump_ops", 0);
+    const U16 save_dumpindent = PL_dumpindent;
+    PL_dumpindent = 2;
+    do_sv_dump(0, Perl_debug_log, sv, 0, lim,
+	       (bool)(dumpop && SvTRUE(dumpop)), pv_lim);
+    PL_dumpindent = save_dumpindent;
+}
+static OP *
+S_pp_dump(pTHX)
+{
+    dSP;
+    const I32 lim = PL_op->op_private == 2 ? (I32)POPi : 4;
+    dPOPss;
+    S_do_dump(aTHX_ sv, lim);
+    RETPUSHUNDEF;
+}
+[% END %]
+
+/*
+    cop_list - array of cops in the code. for debugging, line number info. State/Context op. "Every ; is a cop."
+    op_list  - Chain of operations
+    unop_list - Unary operations
+    binop_list - Binary argument operation: first/last aren't useful to runtime but might be introspected by certain modules.
+    listop_list - Op chains run.c
+    svop_list - all scalars
+    xpv_list - Additional DATA for SVs ( PV body )
+    xpvav_list - Additional data for arrays
+    xpvhv_list - Additional data for hashes
+    xpviv_list - Additional data for PVIV
+    xpvnv_list - Additional data for PVNV
+    xpvmg_list - magic
+    xpvio_list - iosect - initial state of all file handles
+*/
+
+[% FOREACH sect IN section_list %]
+[% lines = section.$sect.index + 1 %]
+[% NEXT IF lines == 0 %]
+Static [% section.$sect.typename() %] [% section.$sect.name() %]_list[[% lines %]] = {
+[% IF verbose AND section.$sect.comment() %]
+    /* [% section.$sect.comment() %] */
+[% END  %]
+[% section.$sect.output("    { %s }, /* %s_list[%d] %s */%s\n") %]
+};
+
+[% END %]
+
+static void perl_init0(pTHX) { /* fixup_ppaddr */
+[% section.init0.output( "    %s\n" ) %]
+};
+
+[% IF verbose AND section.init.comment() %]
+    /* [% section.init.comment() %] */
+[% END %]
+[% section.init.output( "    %s\n", init_name ) %]
+
+/* deferred init1 of regexp */
+[% IF verbose AND section.init1.comment() %]
+    /* [% section.init1.comment() %] */
+[% END %]
+[% section.init1.output( "    %s\n", "perl_init1" ) %]
+
+[% IF verbose %]
+/* deferred init of XS/Dyna loaded modules */
+[% END %]
+
+[% IF verbose AND section.init2.comment() %]
+    /* [% section.init2.comment() %] */
+[% END %]
+[% section.init2.output( "    %s\n", 'perl_init2' ) %]
+
+[% IF verbose %]
+/*
+    COMPILE STATS:  [% compile_stats %]
+     NULLOP count:  [% nullop_count %]
+*/
+[% END %]
+
+/************************************************************************************************************
+*
+*       output_main_rest()
+*
+*************************************************************************************************************/
+
+/* The first assignment got already refcount bumped */
+PERL_STATIC_INLINE HEK * 
+my_share_hek( pTHX_ const char *str, I32 len, register U32 hash ) {
+    if (!hash) {
+      PERL_HASH(hash, str, abs(len));
+    }
+    return share_hek_hek(Perl_share_hek(aTHX_ str, len, hash));
+}
+
+[% IF ! destruct %]
+#ifndef SvDESTROYABLE
+#define SvDESTROYABLE(sv) 1
+#endif
+/* 5.8 */
+#ifndef CvISXSUB
+#define CvISXSUB(sv) CvXSUB(sv)
+#endif
+#ifndef SvRV_set
+#define SvRV_set(a,b) SvRV(a) = (b)
+#endif
+/* 5.6 */
+#ifndef PERL_EXIT_DESTRUCT_END
+#define PERL_EXIT_DESTRUCT_END 2
+#endif
+
+static void
+my_curse( pTHX_ SV* const sv ) {
+    dSP;
+    dVAR;
+    HV* stash;
+
+#if PERL_VERSION > 7
+    assert(SvOBJECT(sv));
+    do {
+        stash = SvSTASH(sv);
+        assert(SvTYPE(stash) == SVt_PVHV);
+	if (HvNAME(stash)) {
+	    CV* destructor = NULL;
+	    if (!SvOBJECT(stash)) destructor = (CV *)SvSTASH(stash);
+	    if (!destructor
+#if (PERL_VERSION > 18) || (PERL_VERSION == 18 && PERL_SUBVERSION > 1)
+                || HvMROMETA(stash)->destroy_gen != PL_sub_generation
+#endif
+	    ) {
+            GV * const gv = gv_fetchmeth_autoload(stash, "DESTROY", 7, 0);
+
+            if (gv) {
+                destructor = GvCV(gv);
+                if (!SvOBJECT(stash)) {
+                    SvSTASH(stash) = destructor ? (HV *)destructor : ((HV *)0)+1;
+                    HvAUX(stash)->xhv_mro_meta->destroy_gen = PL_sub_generation;
+                }
+            }
+	    }
+	    assert(!destructor || destructor == ((CV *)0)+1
+		   || SvTYPE(destructor) == SVt_PVCV);
+	    if (destructor && destructor != ((CV *)0)+1
+		/* A constant subroutine can have no side effects, so
+		   don't bother calling it.  */
+		&& !CvCONST(destructor)
+		/* Don't bother calling an empty destructor or one that
+		   returns immediately. */
+		&& (CvISXSUB(destructor)
+		|| (CvSTART(destructor)
+		    && (CvSTART(destructor)->op_next->op_type != OP_LEAVESUB)
+		    && (CvSTART(destructor)->op_next->op_type != OP_PUSHMARK
+			|| CvSTART(destructor)->op_next->op_next->op_type != OP_RETURN
+		       )
+		   ))
+	       )
+	    {
+		SV* const tmpref = newRV(sv);
+		DEBUG_D(PerlIO_printf(Perl_debug_log, "Calling %s::DESTROY\n", HvNAME(stash)));
+		SvREADONLY_on(tmpref); /* DESTROY() could be naughty */
+		ENTER;
+		PUSHSTACKi(PERLSI_DESTROY);
+		EXTEND(SP, 2);
+		PUSHMARK(SP);
+		PUSHs(tmpref);
+		PUTBACK;
+		call_sv((SV*)destructor, G_DISCARD|G_EVAL|G_KEEPERR|G_VOID);
+		POPSTACK;
+		SPAGAIN;
+		LEAVE;
+		if(SvREFCNT(tmpref) < 2) {
+		    /* tmpref is not kept alive! */
+		    SvREFCNT(sv)--;
+		    SvRV_set(tmpref, NULL);
+		    SvROK_off(tmpref);
+		}
+		SvREFCNT_dec(tmpref);
+	    }
+	}
+    } while (SvOBJECT(sv) && SvSTASH(sv) != stash);
+
+    if (SvOBJECT(sv)) {
+	/* Curse before freeing the stash, as freeing the stash could cause
+	   a recursive call into S_curse. */
+	SvOBJECT_off(sv);	/* Curse the object. */
+	SvSTASH_set(sv,0);	/* SvREFCNT_dec may try to read this */
+    }
+#endif
+}
+
+static int fast_perl_destruct( PerlInterpreter *my_perl ) {
+    dVAR;
+    VOL signed char destruct_level;  /* see possible values in intrpvar.h */
+#ifdef DEBUG_LEAKING_SCALARS_FORK_DUMP
+    pid_t child;
+#endif
+
+#ifndef MULTIPLICITY
+#   ifndef PERL_UNUSED_ARG
+#     define PERL_UNUSED_ARG(x) ((void)x)
+#   endif
+    PERL_UNUSED_ARG(my_perl);
+#endif
+
+    assert(PL_scopestack_ix == 1);
+
+    /* wait for all pseudo-forked children to finish */
+    PERL_WAIT_FOR_CHILDREN;
+
+    destruct_level = PL_perl_destruct_level;
+#ifdef DEBUGGING
+    {
+	const char * const s = PerlEnv_getenv("PERL_DESTRUCT_LEVEL");
+	if (s) {
+            const int i = atoi(s);
+#ifdef DEBUGGING
+	    if (destruct_level < i) destruct_level = i;
+#endif
+#ifdef PERL_TRACK_MEMPOOL
+            /* RT #114496, for perl_free */
+            PL_perl_destruct_level = i;
+#endif
+	}
+    }
+#endif
+
+    if (PL_exit_flags & PERL_EXIT_DESTRUCT_END) {
+        dJMPENV;
+        int x = 0;
+
+        JMPENV_PUSH(x);
+        if (PL_endav && !PL_minus_c) {
+#if PERL_VERSION > 13
+	    PL_phase = PERL_PHASE_END;
+#endif
+            call_list(PL_scopestack_ix, PL_endav);
+        }
+        JMPENV_POP;
+    }
+    LEAVE;
+    FREETMPS;
+    assert(PL_scopestack_ix == 0);
+
+    /* Need to flush since END blocks can produce output */
+    my_fflush_all();
+
+    PL_main_start = NULL;
+    PL_main_cv = NULL;
+    PL_curcop = &PL_compiling;
+#if PERL_VERSION >= 13
+    PL_phase = PERL_PHASE_DESTRUCT;
+#endif
+
+#if PERL_VERSION > 7
+    if (PL_threadhook(aTHX)) {
+        /* Threads hook has vetoed further cleanup */
+#if (PERL_VERSION > 8) || ((PERL_VERSION == 8) && (PERL_SUBVERSION > 8))
+	PL_veto_cleanup = TRUE;
+        return STATUS_EXIT;
+#else
+        return STATUS_NATIVE_EXPORT;
+#endif
+    }
+    PerlIO_destruct(aTHX);
+
+    /* B::C -O3 specific: first curse (i.e. call DESTROY) all our static SVs */
+    if (PL_sv_objcount) {
+        int i = 1;
+        DEBUG_D(PerlIO_printf(Perl_debug_log, "\nCursing named global static sv_arena:\n"));
+        PL_in_clean_all = 1;
+        for (; i < SvREFCNT(&sv_list[0]); i++) {
+            SV *sv = &sv_list[i];
+            if (SvREFCNT(sv)) {
+#if PERL_VERSION > 11
+                if (SvTYPE(sv) == SVt_IV && SvROK(sv))
+#else
+                if (SvTYPE(sv) == SVt_RV)
+#endif
+                    sv = SvRV(sv);
+                if (sv && SvOBJECT(sv) && SvTYPE(sv) >= SVt_PVMG && SvSTASH(sv)
+                    && SvTYPE(sv) != SVt_PVCV && SvTYPE(sv) != SVt_PVIO
+                    && PL_defstash /* Still have a symbol table? */
+                    && SvDESTROYABLE(sv))
+                {
+	            SvREFCNT(sv) = 0;
+                    my_curse(aTHX_ sv);
+                }
+            }
+        }
+    }
+    if (DEBUG_D_TEST) {
+        SV* sva;
+        PerlIO_printf(Perl_debug_log, "\n");
+        for (sva = PL_sv_arenaroot; sva; sva = (SV*)SvANY(sva)) {
+            PerlIO_printf(Perl_debug_log, "sv_arena: 0x%p - 0x%p (%lu)\n",
+              sva, sva+SvREFCNT(sva), 0+SvREFCNT(sva));
+        }
+    }
+#endif
+
+    if (PL_sv_objcount) {
+	PL_in_clean_all = 1;
+	sv_clean_objs(); /* and now curse the rest */
+	PL_sv_objcount = 0;
+    }
+    PL_warnhook = NULL;
+    PL_diehook = NULL;
+    /* call exit list functions */
+    while (PL_exitlistlen-- > 0)
+	PL_exitlist[PL_exitlistlen].fn(aTHX_ PL_exitlist[PL_exitlistlen].ptr);
+    PL_exitlist = NULL;
+
+#if defined(PERLIO_LAYERS)
+    PerlIO_cleanup(aTHX);
+#endif
+    return 0;
+}
+[% ELSE %][%# ELSE for the IF destruct #%]
+/* special COW handling for 5.10 because of S_unshare_hek_or_pvn limitations
+   XXX This fails in S_doeval SAVEFREEOP(PL_eval_root): test 15               */
+
+int my_perl_destruct( PerlInterpreter *my_perl ) {
+    /* set all our static pv and hek to &PL_sv_undef for perl_destruct() */
+
+[% FOREACH to_free IN static_free %]
+  [% IF to_free.match('^sv_list\[\d+\]\.') %]
+    [% to_free %] = NULL;
+  [% ELSIF to_free.match('^sv_list') %]
+    SvLEN(&[% to_free %]) = 0;
+    SvPV_set(&[% to_free %], (char*)&PL_sv_undef);
+  [% ELSIF to_free.match('^&sv_list') %]
+    SvLEN([% to_free %]) = 0;
+    SvPV_set([% to_free %], (char*)&PL_sv_undef);
+  [% ELSIF to_free.match('^\(HV\*\)&sv_list') %]
+    SvREADONLY_on((SV*)[% to_free %]);
+    SvREFCNT([% to_free %]) = SvREFCNT_IMMORTAL;
+  [% ELSIF to_free.match('\(AV\*\)&sv_list') %]
+  /* Nothing is done for AV* sv_list - SVs_OBJECT flag, as the HV */
+  [% ELSIF to_free.match('^&padnamelist_list') %]
+    Safefree(PadnamelistARRAY([% to_free %]));
+    PadnamelistMAX([% to_free %]) = 0;
+    PadnamelistREFCNT([% to_free %]) = 0;
+  [% ELSIF to_free.match('^&padname_list') %]
+    PadnameREFCNT([% to_free %]) = 0;
+/* was marked: dead code below --- */
+  [% ELSIF to_free.match('^cop_list') %]
+    [% IF ITHREADS OR ! MULTI %]
+    CopFILE_set(&[% to_free %], NULL);
+    [% END %]
+    CopSTASH_set(&[% to_free %], NULL);
+  /* was marked: end of dead code --- */
+  [% END %]
+[% END %]
+[% section.free.output("%s\n") %]
+
+    /* B::C specific: prepend static svs to arena for sv_clean_objs */
+    SvANY(&sv_list[0]) = (void *)PL_sv_arenaroot;
+    PL_sv_arenaroot = &sv_list[0];
+#if PERL_VERSION > 7
+    if (DEBUG_D_TEST) {
+        SV* sva;
+        PerlIO_printf(Perl_debug_log, "\n");
+        for (sva = PL_sv_arenaroot; sva; sva = (SV*)SvANY(sva)) {
+            PerlIO_printf(Perl_debug_log, "sv_arena: 0x%p - 0x%p (%lu)\n",
+              sva, sva+SvREFCNT(sva), 0+SvREFCNT(sva));
+        }
+    }
+    return perl_destruct( my_perl );
+#else
+    perl_destruct( my_perl );
+    return 0;
+#endif
+}
+[% END %]
+
+/* yanked from perl.c */
+static void
+xs_init(pTHX)
+{
+	char *file = __FILE__;
+	dTARG; dSP;
+
+/*   Was commented out in code. not sure what the FIXME is about.
+[% IF staticxs %]
+#undef USE_DYNAMIC_LOADING
+[% END %]
+*/
+
+#ifdef USE_DYNAMIC_LOADING
+    newXS("DynaLoader::boot_DynaLoader", boot_DynaLoader, file);
+#endif
+
+/* XS bootstrapping code*/
+    SAVETMPS;
+    targ=sv_newmortal();
+
+[% FOREACH stashname IN static_ext.keys.sort %]
+    newXS("[% stashname %]\::bootstrap", boot_[% stashname.replace('::', '__') %], file);
+[% END %]
+
+#ifdef USE_DYNAMIC_LOADING
+    PUSHMARK(sp);
+    XPUSHp("DynaLoader", 10);
+    PUTBACK;
+    boot_DynaLoader(aTHX_ get_cv("DynaLoader::bootstrap", GV_ADD));
+    SPAGAIN;
+#endif
+
+[% FOREACH stashname IN xsub.keys.sort %]
+[% NEXT IF static_ext.$stashname OR xsub.$stashname.match('^Dynamic') %]
+[% stashxsub = stashname.replace('::', '__') %]
+    PUSHMARK(sp);
+    XPUSHp("[% stashname %]", [% stashname.length %]); /* "::bootstrap" gets appended, TODO: "strdup($stashname)" */
+    PUTBACK;
+    boot_[% stashxsub %](aTHX_ NULL);
+    SPAGAIN;
+        }
+[% END %]
+
+    FREETMPS;
+/* end XS bootstrapping code */
+}
+
+[% optimizer.dynaloader.boot %]
+
+static void
+dl_init(pTHX)
+{
+	/* char *file = __FILE__; */
+[% IF optimizer.dynaloader.dl %]
+    dTARG;
+    dSP;
+/* DynaLoader bootstrapping */
+    ENTER;
+  [% IF optimizer.dynaloader.xs %]
+    ++cxstack_ix;
+    cxstack[cxstack_ix].blk_oldcop = PL_curcop;
+    /* assert(cxstack_ix == 0); */
+  [% END %]
+    SAVETMPS;
+  [% IF optimizer.dynaloader.fixups.coro %]
+ /* needed before dl_init, and after init */
+    {
+        GV *sym;
+
+        sym = gv_fetchpv("Coro",0,SVt_PV);
+        if (sym && GvSVn(sym)) SvREADONLY_off(GvSVn(sym));
+
+        sym = gv_fetchpv("Coro::API",0,SVt_PV);
+        if (sym && GvSVn(sym)) SvREADONLY_off(GvSVn(sym));
+
+        sym = gv_fetchpv("Coro::current",0,SVt_PV);
+        if (sym && GvSVn(sym)) SvREADONLY_off(GvSVn(sym));
+
+        sym = gv_fetchpv("Coro::pool_handler)",0,SVt_PVCV);
+        if (sym && GvCV(sym)) SvREADONLY_off(GvCV(sym));
+    }
+  [% END %]
+  [% IF optimizer.dynaloader.fixups.EV %]
+  /* EV readonly symbols in BOOT (#368) */
+    {
+        GV *sym;
+
+        sym = gv_fetchpv("EV::API",0,SVt_PV);
+        if (sym && GvSVn(sym)) SvREADONLY_off(GvSVn(sym));
+    }
+  [% END %]
+  [% FOREACH stashname IN optimizer.dynaloader.dl_modules %]
+    [% NEXT IF ! xsub.$stashname.match('^Dynamic')  %]
+    PUSHMARK(sp);
+
+/* XXX -O1 or -O2 needs XPUSHs with dynamic pv */
+    mXPUSHp("[% stashname %]", [% stashname.length %]);
+
+/* XSLoader has the 2nd insanest API in whole Perl, right after make_warnings_object() */
+#ifndef STATICXS
+      [% IF xsub.$stashname == 'Dynamic' %]
+    PUTBACK;
+    call_method("DynaLoader::bootstrap_inherit", G_VOID|G_DISCARD);
+      [% ELSE %]
+        [% stashfile = xsub.$stashname.remove('^Dynamic-') %]
+        [% IF stashfile %]
+    mXPUSHp("[% stashfile %]", [% stashfile.length %]);
+        [% END %]
+    PUTBACK;
+/* TODO #364: if a VERSION was provided need to add it here */
+    call_pv("XSLoader::load_file", G_VOID|G_DISCARD);
+      [% END %]
+#else
+    PUTBACK;
+    /* CvSTASH(CvGV(cv)) is invalid without (issue 86) */
+    /* TODO: utf8 stashname */
+    { /* GH 333 */
+        CV* cv = (CV*)SvREFCNT_inc_simple_NN(get_cv("[% stashname %]::bootstrap", GV_ADD));
+        CvISXSUB_on(cv); /* otherwise a perl assertion fails. */
+        cv->sv_any->xcv_padlist_u.xcv_hscxt = &PL_stack_sp; /* xs_handshake */
+        boot_[% stashname.replace('::', '__') %](aTHX_ cv);
+    }
+#endif
+    SPAGAIN;
+/*    PUTBACK;*/
+  [% END %]
+    FREETMPS;
+      [% IF optimizer.dynaloader.xs %]
+    cxstack_ix--; /* i.e. POPBLOCK */
+      [% END %]
+    LEAVE;
+/* end DynaLoader bootstrapping */
+[% END %]
+}
+
+/************************************************************************************************************
+*
+*       output_main()
+*
+*************************************************************************************************************/
+
+[% IF module.defined %]
+#include "XSUB.h"
+XS(boot_$cmodule)
+{
+    dXSARGS;
+    perl_init();
+    ENTER;
+    SAVETMPS;
+    SAVEVPTR(PL_curpad);
+    SAVEVPTR(PL_op);
+    dl_init(aTHX);
+    PL_curpad = AvARRAY([% module_curpad_sym %]);
+    PL_comppad = [% module_curpad_sym %];
+    PL_op = op_list[0];
+    perl_run( aTHX ); /* Perl_runops_standard(aTHX); */
+    FREETMPS;
+    LEAVE;
+    ST(0) = &PL_sv_yes;
+    XSRETURN(1);
+}
+[% ELSE %]
+
+/* if USE_IMPLICIT_SYS, we need a 'real' exit */
+#if defined(exit)
+#undef exit
+#endif
+
+int
+main(int argc, char **argv, char **env)
+{
+    int exitstatus;
+    int i;
+    char **fakeargv;
+    int options_count;
+    PerlInterpreter *my_perl;
+
+    PERL_SYS_INIT3(&argc,&argv,&env);
+
+#ifdef WIN32
+#define PL_do_undump 0
+#endif
+    if (!PL_do_undump) {
+	my_perl = perl_alloc();
+	if (!my_perl)
+	    exit(1);
+	perl_construct( my_perl );
+	PL_perl_destruct_level = 0;
+    }
+  [% IF ITHREADS %]
+#ifdef USE_ITHREADS
+    if (!*PL_regex_pad) {
+      /* Someone is overwriting regex_pad since 5.15, but not on -fno-warnings */
+      PL_regex_padav = newAV();
+#if PERL_VERSION > 10
+      av_push(PL_regex_padav, newSVpvs("")); /* First entry is empty */
+#else
+      av_push(PL_regex_padav, newSViv(0));
+#endif
+      PL_regex_pad = AvARRAY(PL_regex_padav);
+    }
+    for( i = 0; i < [% regex_padav_pad_len %]; ++i ) {
+        av_push( PL_regex_padav, newSViv(0) );
+    }
+    PL_regex_pad = AvARRAY( PL_regex_padav );
+#endif
+  [% END %]
+    PL_exit_flags |= PERL_EXIT_DESTRUCT_END;
+
+/* perlmain.c sets PL_use_safe_putenv so we must do this
+   here as well.
+
+   See perl's INSTALL file under
+   Environment access for more information. */
+
+#ifndef PERL_USE_SAFE_PUTENV
+    PL_use_safe_putenv = 0;
+#endif /* PERL_USE_SAFE_PUTENV */
+
+/*  XXX With -e "" we need to fake parse_body() scriptname = BIT_BUCKET */
+#ifdef ALLOW_PERL_OPTIONS
+#define EXTRA_OPTIONS 3
+#else
+#define EXTRA_OPTIONS 4
+#endif /* ALLOW_PERL_OPTIONS */
+    Newx(fakeargv, argc + EXTRA_OPTIONS + 1, char *);
+    fakeargv[0] = argv[0];
+    fakeargv[1] = "-e";
+    fakeargv[2] = "";
+    options_count = 3;
+
+  [% IF TAINT %]
+/*  honour -T */
+    fakeargv[options_count] = "-T";
+    ++options_count;
+  [% END %]
+
+#ifndef ALLOW_PERL_OPTIONS
+    fakeargv[options_count] = "--";
+    ++options_count;
+#endif /* ALLOW_PERL_OPTIONS */
+    for (i = 1; i < argc; i++)
+	fakeargv[i + options_count - 1] = argv[i];
+    fakeargv[argc + options_count - 1] = 0;
+
+    exitstatus = perl_parse(my_perl, xs_init, argc + options_count - 1,
+			    fakeargv, env);
+    if (exitstatus)
+	exit( exitstatus );
+
+    TAINT;
+
+/* setup $0 on execution */
+  [% IF use_perl_script_name %]
+    sv_setpv_mg(get_sv("0", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_0 %]);
+    CopFILE_set(&PL_compiling, [% global_vars.dollar_0 %]);
+  [% ELSE %]
+    sv_setpv_mg(get_sv("0", GV_ADD|GV_NOTQUAL), argv[0]);
+    CopFILE_set(&PL_compiling, argv[0]);
+  [% END %]
+
+    [% IF global_vars.dollar_caret_H %]
+    PL_hints = [% global_vars.dollar_caret_H %];
+    [% END %]
+
+    [% IF global_vars.dollar_caret_UNICODE %]
+    PL_unicode = [% global_vars.dollar_caret_UNICODE %];
+    [% END %]
+
+    /* nomg */
+    [% IF global_vars.dollar_semicolon.defined  %]
+    sv_setpv(get_sv(";", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_semicolon %]);
+    [% END %]
+
+    [% IF global_vars.dollar_quote.defined  %]
+    sv_setpv(get_sv("\"", GV_NOTQUAL), [% global_vars.dollar_quote %]); /* $" */
+    [% END %]
+
+    /* global IO vars */
+
+    [% IF global_vars.dollar_comma %]
+    sv_setpv_mg(GvSVn(PL_ofsgv), [% global_vars.dollar_comma %]); /* $, */
+    [% END %]
+
+    [% IF global_vars.dollar_backslash %]
+    sv_setpv_mg(get_sv("\\", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_backslash %]); /* $\ */
+    [% END %]
+
+    [% IF global_vars.dollar_slash.defined  %]
+    sv_setpv_mg(get_sv("/", GV_NOTQUAL), [% global_vars.dollar_slash %]); /* $/ a.k.a. RS */
+    [% END %]
+
+    [% IF global_vars.dollar_pipe %]
+    sv_setiv_mg(get_sv("|", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_pipe %]); /* $| a.k.a. OUTPUT_AUTOFLUSH */
+    [% END %]
+
+    /* global format vars */
+
+    [% IF global_vars.dollar_caret_A %]
+    sv_setpv_mg(get_sv("^A", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_caret_A %]); /* $^A - #ACCUMULATOR */
+    [% END %]
+
+    [% IF global_vars.dollar_caret_L.defined  %]
+    sv_setpv_mg(get_sv("^L", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_caret_L %]); /* $^L - FORMFEED */
+    [% END %]
+
+    [% IF global_vars.dollar_caret_L.defined  %]
+    sv_setpv_mg(get_sv(":", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_colon %]); /* $: - LINE_BREAK_CHARACTERS */
+    [% END %]
+
+    [% IF global_vars.dollar_caret.defined  %]
+    sv_setpv_mg(get_sv("^", GV_ADD|GV_NOTQUAL), savepvn([% global_vars.dollar_caret.str %], [% global_vars.dollar_caret.len %])); /* $^ - FORMAT_TOP_NAME */
+    [% END %]
+
+    [% IF global_vars.dollar_tilde.defined  %]
+    sv_setpv_mg(get_sv("~", GV_ADD|GV_NOTQUAL), savepvn([% global_vars.dollar_tilde.str %], [% global_vars.dollar_tilde.len %])); /* $~ - FORMAT_NAME */
+    [% END %]
+
+    [% IF global_vars.dollar_percent %]
+    sv_setiv_mg(get_sv("%", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_percent %]); /* $% - PAGE_NUMBER */
+    [% END %]
+
+    [% IF global_vars.dollar_minus.defined %]
+    sv_setiv_mg(get_sv("-", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_minus %]);  /* $- - LINES_LEFT */
+    [% END %]
+
+    [% IF global_vars.dollar_equal.defined %]
+    sv_setiv_mg(get_sv("=", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_equal %]); /* $= - LINES_PER_PAGE */
+    [% END %]
+
+    sv_setpv_mg(get_sv("\030", GV_ADD|GV_NOTQUAL), [% global_vars.dollar_caret_X %]); /* $^X - EXECUTABLE_NAME */
+
+    TAINT_NOT;
+
+    #if PERL_VERSION < 10 || ((PERL_VERSION == 10) && (PERL_SUBVERSION < 1))
+      PL_compcv = 0;
+    #else
+      /* PL_compcv used during compilation. */
+      PL_compcv = MUTABLE_CV(newSV_type(SVt_PVCV));
+      CvUNIQUE_on(PL_compcv);
+      CvPADLIST(PL_compcv) = pad_new(0);
+    #endif
+
+    /* our special compiled init */
+    perl_init(aTHX);
+    perl_init1(aTHX);
+    dl_init(aTHX);
+
+    /* We need to output evals after dl_init, in init2  */
+    [% FOREACH eval_pv IN all_eval_pvs %]
+    [% eval_pv %]
+    [% END %]
+
+    perl_init2(aTHX);
+
+
+    exitstatus = perl_run( my_perl );
+
+    /* init pre_destruct */
+    [% FOREACH str IN section.init.pre_destruct() %]
+    [% str %]
+    [% END %]
+
+    /* destruct */
+
+    [% IF destruct %]
+    my_perl_destruct( my_perl );
+    [% ELSE %]
+    fast_perl_destruct( my_perl );
+    [% END %]
+
+    /*  XXX endav is called via call_list and so it is freed right after usage. Setting dirty here is useless */
+    /* [% UNLESS pv_copy_on_grow %]PL_dirty = 1;[% END %]   protect against pad undef in END block */
+
+    perl_free( my_perl );
+
+    PERL_SYS_TERM();
+
+    exit( exitstatus );
+[% END %]
+}
