@@ -1,7 +1,7 @@
 # written by B::C Makefile.PL. $extra_{cflags,libs} need a leading space if used.
 package B::C::Flags;
 
-$VERSION = '5.022010';
+$VERSION = '5.022011';
 # -fav-init optimization
 $have_independent_comalloc = 0;
 $use_declare_independent_comalloc = 0;
