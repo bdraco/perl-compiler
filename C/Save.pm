@@ -108,18 +108,20 @@ sub savepvn {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $max_string_len = $B::C::max_string_len || 32768;
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
-              my $svidx = $1;
+            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256 ) ) {    # 1 was B::C::IsCOW($sv)
+                my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
-              push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
-              push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx);
-              push @init, sprintf( "SvCUR_set(&sv_list[%d],%d);", $svidx, $cur );
-              push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $cur + 2 );
-              push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
-            } else {
-              debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
-              $cur = 0 if $cstr eq "" and $cur == 7;    # 317
-              push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+                push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
+                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx );
+
+                # Cow is "STRING\0COUNT"
+                my $svlen = $cur + 2;
+                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
+            }
+            else {
+                debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
+                $cur = 0 if $cstr eq "" and $cur == 7;                                                                                            # 317
+                push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
             }
         }
     }
