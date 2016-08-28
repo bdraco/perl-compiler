@@ -107,17 +107,10 @@ sub savepvn {
         else {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            my $docow = B::C::IsCOW($sv);
-            if ( $sv and $docow ) {
-                  #$pv .= "\0\001";
-                  $pv .= "\0\001";
-                  $cstr = cstring($pv);
-                  $cur += 2;
-            }
-            if ( $cur && $docow && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
+            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
               my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
-              push @init, sprintf( "%s = sv_list[%d].sv_u.svu_pv;", $dest, cowpv($pv) );
+              push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
               push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx);
               push @init, sprintf( "SvCUR_set(&sv_list[%d],%d);", $svidx, $cur - 2 );
               push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $cur );
