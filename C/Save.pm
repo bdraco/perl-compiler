@@ -42,7 +42,7 @@ sub cowpv {
 
 sub save_cow_pvs {
   foreach my $pv (keys %seencow) {
-    my $cstring = "$pv\0" . $seencow{$pv}->[1];
+    my $cstring = "$pv\0" . chr($seencow{$pv}->[1]);
     my $pvsym = $seencow{$pv}->[0];
     decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, $cstring ) );
   }
@@ -106,15 +106,16 @@ sub savepvn {
         }
         else {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
+            my $max_string_len = $B::C::max_string_len || 32768;
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $B::C::max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
+            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
               my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
               push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
               push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx);
               push @init, sprintf( "SvCUR_set(&sv_list[%d],%d);", $svidx, $cur - 2 );
               push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $cur );
-                            #push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
+              push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
             } else {
               debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
               $cur = 0 if $cstr eq "" and $cur == 7;    # 317
