@@ -107,7 +107,7 @@ sub savepvn {
         else {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
+            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $B::C::max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
               my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
               push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
