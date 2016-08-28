@@ -113,8 +113,8 @@ sub savepvn {
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
               push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
               push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx);
-              push @init, sprintf( "SvCUR_set(&sv_list[%d],%d);", $svidx, $cur - 2 );
-              push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $cur );
+              push @init, sprintf( "SvCUR_set(&sv_list[%d],%d);", $svidx, $cur );
+              push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $cur + 2 );
               push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
             } else {
               debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
