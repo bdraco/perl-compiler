@@ -39,6 +39,7 @@ sub cowpv {
 
     return $seencow{$pv}->[0] if $seencow{$pv}->[0];
 
+    $seencow{$pv}->[1]++; # Always have a refcount of 2 or higher to prevent free
     my $pvsym = sprintf( "pv%d", inc_pv_index() );
     $seencow{$pv}->[0] = $pvsym;
     return $seencow{$pv}->[0];
@@ -112,7 +113,7 @@ sub savepvn {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $max_string_len = $B::C::max_string_len || 32768;
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256 ) ) {    # 1 was B::C::IsCOW($sv)
+            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
@@ -122,8 +123,8 @@ sub savepvn {
                 # Its not clear if we need to bother setting
                 # SvLEN and everything seems to work without doing so
                 #
-                #my $svlen = $cur + 2;
-                #push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
+                my $svlen = $cur + 2;
+                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
