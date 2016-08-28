@@ -29,12 +29,16 @@ sub constpv {
     return savepv( shift, 1 );
 }
 
+# %seencow Lookslike
+# {
+#   'STRING' => [ pv%d, COUNT ]
+# }
 sub cowpv {
     my $pv = shift;
     $seencow{$pv}->[1]++;
 
     return $seencow{$pv}->[0] if $seencow{$pv}->[0];
-    
+
     my $pvsym = sprintf( "pv%d", inc_pv_index() );
     $seencow{$pv}->[0] = $pvsym;
     return $seencow{$pv}->[0];
