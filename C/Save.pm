@@ -13,6 +13,7 @@ our @ISA = qw(Exporter);
 
 our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv/;
 
+my %seencow;
 my %strtable;
 
 # Two different families of save functions
@@ -26,6 +27,25 @@ sub inc_pv_index {
 
 sub constpv {
     return savepv( shift, 1 );
+}
+
+sub cowpv {
+    my $pv = shift;
+    $seencow{$pv}->[1]++;
+
+    return $seencow{$pv}->[0] if $seencow{$pv}->[0];
+    
+    my $pvsym = sprintf( "pv%d", inc_pv_index() );
+    $seencow{$pv}->[0] = $pvsym;
+    return $seencow{$pv}->[0];
+}
+
+sub save_cow_pvs {
+  foreach my $pv (keys %seencow) {
+    my $cstring = "$pv\0" . $seencow{$pv}->[1];
+    my $pvsym = $seencow{$pv}->[0];
+    decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, $cstring ) );
+  }
 }
 
 my $max_string_len;
@@ -85,16 +105,28 @@ sub savepvn {
             }
         }
         else {
-            my $cstr = cstring($pv);
+            my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            if ( $sv and B::C::IsCOW($sv) ) {
-                $pv .= "\0\001";
-                $cstr = cstring($pv);
-                $cur += 2;
+            my $docow = B::C::IsCOW($sv);
+            if ( $sv and $docow ) {
+                  #$pv .= "\0\001";
+                  $pv .= "\0\001";
+                  $cstr = cstring($pv);
+                  $cur += 2;
             }
-            debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
-            $cur = 0 if $cstr eq "" and $cur == 7;    # 317
-            push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+            if ( $cur && $docow && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 256) ) { # 1 was B::C::IsCOW($sv) 
+              my $svidx = $1;
+                debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
+              push @init, sprintf( "%s = sv_list[%d].sv_u.svu_pv;", $dest, cowpv($pv) );
+              push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx);
+              push @init, sprintf( "SvCUR_set(&sv_list[%d],%d);", $svidx, $cur - 2 );
+              push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $cur );
+                            #push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
+            } else {
+              debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
+              $cur = 0 if $cstr eq "" and $cur == 7;    # 317
+              push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+            }
         }
     }
     return @init;
