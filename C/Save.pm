@@ -119,8 +119,11 @@ sub savepvn {
                 push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW;", $svidx );
 
                 # Cow is "STRING\0COUNT"
-                my $svlen = $cur + 2;
-                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
+                # Its not clear if we need to bother setting
+                # SvLEN and everything seems to work without doing so
+                #
+                #my $svlen = $cur + 2;
+                #push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
