@@ -42,7 +42,7 @@ sub cowpv {
 
 sub save_cow_pvs {
   foreach my $pv (keys %seencow) {
-    my $cstring = "$pv\0" . chr($seencow{$pv}->[1]);
+    my $cstring = cstring("$pv\0" . chr($seencow{$pv}->[1]));
     my $pvsym = $seencow{$pv}->[0];
     decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, $cstring ) );
   }
