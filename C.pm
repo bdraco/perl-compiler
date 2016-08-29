@@ -313,6 +313,10 @@ sub svop_or_padop_pv {
     }
 }
 
+sub IsREADONLY {
+    return ( $_[0]->FLAGS & 0x08000000 );    # since 5.22
+}
+
 sub IsCOW {
     return ( $_[0]->FLAGS & 0x10000000 );    # since 5.22
 }
