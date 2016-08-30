@@ -113,11 +113,11 @@ sub savepvn {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $max_string_len = $B::C::max_string_len || 32768;
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
-            if ( $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
+            if ( length $cstr && $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
-                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC | SVf_THINKFIRST;", $svidx );
+                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC;", $svidx );
 
                 # Cow is "STRING\0COUNT"
                 # Its not clear if we need to bother setting
