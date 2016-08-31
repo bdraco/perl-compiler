@@ -120,7 +120,7 @@ sub savepvn {
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
-                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC;", $svidx );
+                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC | SVs_GMG;", $svidx );
 
                 # Cow is "STRING\0COUNT"
                 # Its not clear if we need to bother setting
