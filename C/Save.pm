@@ -13,6 +13,8 @@ our @ISA = qw(Exporter);
 
 our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv save_cow_pvs/;
 
+our $PERL_SUPPORTS_STATIC_FLAG = 1;
+
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 my %seencow;
@@ -120,7 +122,8 @@ sub savepvn {
             # things after \0.  For example
             # Boyer-Moore table is just after string and its safety-margin \0
             if (
-                $cstr ne q{""}
+                   $PERL_SUPPORTS_STATIC_FLAG
+                && $cstr ne q{""}
                 && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
                 && $cur
                 && $dest =~ m{sv_list\[([^\]]+)\]\.}
