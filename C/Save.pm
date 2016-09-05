@@ -134,7 +134,7 @@ sub savepvn {
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 $cur = 0 if $cstr eq "" and $cur == 7;                                                                                            # 317
-                if ( $cstr eq q{""} && $dest =~ m{sv_list\[([^\]]+)\]\.} && ref $sv eq 'B::PV' &&  $sv->CUR() == 0) {
+                if ( 0 && $cstr eq q{""} && $dest =~ m{sv_list\[([^\]]+)\]\.} && ref $sv eq 'B::PV' &&  $sv->CUR() == 0) {
                   my $svidx = $1;
                   #  can we optimize here?
                   my $type =ref $sv;
