@@ -114,14 +114,15 @@ sub savepvn {
             my $max_string_len = $B::C::max_string_len || 32768;
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
 
-
-            # We cannot COW anything with magic because
-            # /* Boyer-Moore table is just after string and its safety-margin \0 */
+            # We cannot COW anything except B::PV because other may store
+            # things after \0.  For example
+            # Boyer-Moore table is just after string and its safety-margin \0
             if ( $cstr ne q{""} && ref $sv eq 'B::PV' && $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
                 push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC;", $svidx );
+
                 #push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC | SVs_GMG;", $svidx );
 
                 # Cow is "STRING\0COUNT"
@@ -131,23 +132,20 @@ sub savepvn {
                 my $svlen = $cur + 2;
                 push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
+            elsif (
+                0    # This currently causes a segfault so its disbaled
+                && $cstr eq q{""}
+                && $dest =~ m{sv_list\[([^\]]+)\]\.}
+                && ref $sv eq 'B::PV'
+                && $sv->CUR() == 0
+              ) {
+                my $svidx = $1;
+                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, 0 );
+            }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
-                $cur = 0 if $cstr eq "" and $cur == 7;                                                                                            # 317
-                if ( 0 && $cstr eq q{""} && $dest =~ m{sv_list\[([^\]]+)\]\.} && ref $sv eq 'B::PV' &&  $sv->CUR() == 0) {
-                  my $svidx = $1;
-                  #  can we optimize here?
-                  my $type =ref $sv;
-                  my $len = $sv->LEN();
-                  my $cur = $sv->CUR();
-                  print STDERR "[OPTIMIZE AWAY][$type][[$cstr]][len][$len][cur][$cur]\n";
-                  push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, 0 );
-                #  push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
-                } else {
-                  my $type =ref $sv;
-                  print STDERR "[$type][[$cstr]]\n";
-                  push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
-                }
+                $cur = 0 if $cstr eq "" and $cur == 7;    # 317
+                push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
             }
         }
     }
