@@ -134,13 +134,15 @@ sub savepvn {
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 $cur = 0 if $cstr eq "" and $cur == 7;                                                                                            # 317
-                if ($cstr eq q{""}) {
+                if ($cstr eq q{""} && $dest =~ m{sv_list\[([^\]]+)\]\.} && ( ref $sv eq 'B::PV' || ref $sv eq 'B::PVIV' || ref $sv eq 'B::PVNV' ) ) {
+                  my $svidx = $1;
                   #  can we optimize here?
                   my $type =ref $sv;
                   my $len = $sv->LEN();
                   my $cur = $sv->CUR();
                   print STDERR "[$type][[$cstr]][len][$len][cur][$cur]\n";
-                  push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+                  push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, 0 );
+                #  push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
                 } else {
                   my $type =ref $sv;
                   print STDERR "[$type][[$cstr]]\n";
