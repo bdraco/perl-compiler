@@ -115,12 +115,14 @@ sub savepvn {
             my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
 
 
-
+            # We cannot COW anything with magic because
+            # /* Boyer-Moore table is just after string and its safety-margin \0 */
             if ( $cstr ne q{""} && $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
-                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC | SVs_GMG;", $svidx );
+                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC;", $svidx );
+                #push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC | SVs_GMG;", $svidx );
 
                 # Cow is "STRING\0COUNT"
                 # Its not clear if we need to bother setting
