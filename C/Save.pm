@@ -137,7 +137,9 @@ sub savepvn {
                 if ($cstr eq q{""}) {
                   #  can we optimize here?
                   my $type =ref $sv;
-                  print STDERR "[$type][[$cstr]]\n";
+                  my $len = $sv->LEN();
+                  my $cur = $sv->CUR();
+                  print STDERR "[$type][[$cstr]][len][$len][cur][$cur]\n";
                   push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
                 } else {
                   my $type =ref $sv;
