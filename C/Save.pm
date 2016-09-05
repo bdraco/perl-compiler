@@ -13,6 +13,8 @@ our @ISA = qw(Exporter);
 
 our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv save_cow_pvs/;
 
+use constant COWPV     => 0;
+use constant COWREFCNT => 1;
 my %seencow;
 my %strtable;
 
@@ -35,22 +37,22 @@ sub constpv {
 # }
 sub cowpv {
     my $pv = shift;
-    $seencow{$pv}->[1]++;
+    $seencow{$pv}->[COWREFCNT]++;
 
-    return $seencow{$pv}->[0] if $seencow{$pv}->[0];
+    return $seencow{$pv}->[COWPV] if $seencow{$pv}->[COWPV];
 
-    $seencow{$pv}->[1]++; # Always have a refcount of 2 or higher to prevent free
+    $seencow{$pv}->[COWREFCNT]++;    # Always have a refcount of 2 or higher to prevent free
     my $pvsym = sprintf( "pv%d", inc_pv_index() );
-    $seencow{$pv}->[0] = $pvsym;
-    return $seencow{$pv}->[0];
+    $seencow{$pv}->[COWPV] = $pvsym;
+    return $seencow{$pv}->[COWPV];
 }
 
 sub save_cow_pvs {
-  foreach my $pv (keys %seencow) {
-    my $cstring = cstring("$pv\0" . chr($seencow{$pv}->[1]));
-    my $pvsym = $seencow{$pv}->[0];
-    decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, $cstring ) );
-  }
+    foreach my $pv ( keys %seencow ) {
+        my $cstring = cstring( "$pv\0" . chr( $seencow{$pv}->[COWREFCNT] ) );
+        my $pvsym   = $seencow{$pv}->[0];
+        decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, $cstring ) );
+    }
 }
 
 my $max_string_len;
@@ -117,7 +119,14 @@ sub savepvn {
             # We cannot COW anything except B::PV because other may store
             # things after \0.  For example
             # Boyer-Moore table is just after string and its safety-margin \0
-            if ( $cstr ne q{""} && ref $sv eq 'B::PV' && $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
+            if (
+                $cstr ne q{""}
+                && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
+                && $cur
+                && $dest =~ m{sv_list\[([^\]]+)\]\.}
+                && $len < $max_string_len
+                && ( !$seencow{$cstr} || $seencow{$cstr}->[COWREFCNT] < 255 )
+              ) {
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
