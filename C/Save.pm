@@ -117,7 +117,7 @@ sub savepvn {
 
             # We cannot COW anything with magic because
             # /* Boyer-Moore table is just after string and its safety-margin \0 */
-            if ( $cstr ne q{""} && $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
+            if ( $cstr ne q{""} && ref $sv eq 'B::PV' && $cur && $dest =~ m{sv_list\[([^\]]+)\]\.} && $len < $max_string_len && ( !$seencow{$cstr} || $seencow{$cstr}->[1] < 255 ) ) {    # 1 was B::C::IsCOW($sv)
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
@@ -132,7 +132,7 @@ sub savepvn {
                 push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             else {
-                #print STDERR "[[$cstr]]\n";
+                print STDERR "[[$cstr]]\n";
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 $cur = 0 if $cstr eq "" and $cur == 7;                                                                                            # 317
                 push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
