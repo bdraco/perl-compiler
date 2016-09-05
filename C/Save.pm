@@ -132,10 +132,18 @@ sub savepvn {
                 push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             else {
-                print STDERR "[[$cstr]]\n";
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
                 $cur = 0 if $cstr eq "" and $cur == 7;                                                                                            # 317
-                push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+                if ($cstr eq q{""}) {
+                  #  can we optimize here?
+                  my $type =ref $sv;
+                  print STDERR "[$type][[$cstr]]\n";
+                  push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+                } else {
+                  my $type =ref $sv;
+                  print STDERR "[$type][[$cstr]]\n";
+                  push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
+                }
             }
         }
     }
