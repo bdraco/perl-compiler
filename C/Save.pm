@@ -141,8 +141,8 @@ sub savepvn {
                 # Its not clear if we need to bother setting
                 # SvLEN and everything seems to work without doing so
                 #
-                my $svlen = $cur + 2;
-                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
+                # my $svlen = $cur + 2;
+                #push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             elsif (
                 0    # This currently causes a segfault so its disbaled
