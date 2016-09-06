@@ -154,9 +154,9 @@ sub savepvn {
                 && $sv->CUR() == 0
               ) {
                 my $svidx = $1;
-                push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
                 push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, 0 );
                 push @init, sprintf( '%s = "";', $dest );
+                push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
             }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
