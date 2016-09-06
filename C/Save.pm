@@ -123,7 +123,7 @@ sub savepvn {
             # Boyer-Moore table is just after string and its safety-margin \0
             if (
                    $PERL_SUPPORTS_STATIC_FLAG
-                && $cstr ne q{""}
+                #&& $cstr ne q{""}
                 && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
                 && $cur
                 && $dest =~ m{sv_list\[([^\]]+)\]\.}
@@ -145,7 +145,8 @@ sub savepvn {
                 #push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             elsif (
-                $cstr eq q{""}
+             0 &&
+   $cstr eq q{""}
                 && $dest =~ m{sv_list\[([^\]]+)\]\.}
                 && ref $sv eq 'B::PV'
                 && $sv->LEN() == 10
