@@ -2,7 +2,7 @@ package B::C::Save;
 
 use strict;
 
-use B qw(cstring svref_2object);
+use B qw(cstring svref_2object SVf_READONLY SVf_PROTECT);
 use B::C::Config;
 use B::C::File qw( xpvmgsect decl init );
 use B::C::Helpers qw/strlen_flags/;
@@ -145,13 +145,16 @@ sub savepvn {
                 #push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             elsif (
-                0    # This currently causes a segfault so its disbaled
-                && $cstr eq q{""}
+                $cstr eq q{""}
                 && $dest =~ m{sv_list\[([^\]]+)\]\.}
                 && ref $sv eq 'B::PV'
+                && $sv->LEN() == 10
+                && $sv->FLAGS() & SVf_PROTECT
+                && $sv->FLAGS() & SVf_READONLY
                 && $sv->CUR() == 0
               ) {
                 my $svidx = $1;
+                push @init, sprintf( "sv_dump(&sv_list[%d]);", $svidx );
                 push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, 0 );
             }
             else {
