@@ -9,7 +9,7 @@ use B::C::Helpers qw/strlen_flags/;
 use B::C::Save::Hek qw/save_hek/;
 use B::C::File qw/xpvsect svsect/;
 
-use constant SVf_IsCOW => 0x10000000;
+use constant SVf_IsSTATIC => 0x10000000;
 
 use Exporter ();
 our @ISA = qw(Exporter);
@@ -137,7 +137,7 @@ sub savepvn {
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
 
                 my $sv_c_struct = svsect()->get($svidx);
-                my( $xpv, $refcnt, $flags, $safesym ) = split(m{,}, $sv_c_struct);
+                my( $xpv, $refcnt, $flags, $savesym ) = split(m{,}, $sv_c_struct);
                 $flags =~ s{^0x}{};
                 $flags &= SVf_IsCOW;
                 $flags &= SVf_IsSTATIC;
