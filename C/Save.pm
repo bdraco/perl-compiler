@@ -2,11 +2,14 @@ package B::C::Save;
 
 use strict;
 
-use B qw(cstring svref_2object);
+use B qw(cstring svref_2object SVf_IsCOW);
 use B::C::Config;
 use B::C::File qw( xpvmgsect decl init );
 use B::C::Helpers qw/strlen_flags/;
 use B::C::Save::Hek qw/save_hek/;
+use B::C::File qw/xpvsect svsect/;
+
+use constant SVf_IsCOW => 0x10000000;
 
 use Exporter ();
 our @ISA = qw(Exporter);
@@ -126,22 +129,25 @@ sub savepvn {
                 && $cstr ne q{""}        # TODO handle empty strings
                 && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
                 && $cur
-                && $dest =~ m{sv_list\[([^\]]+)\]\.}
                 && $len < $max_string_len
                 && ( !$seencow{$cstr} || $seencow{$cstr}->[COWREFCNT] < 255 )
+                && $dest =~ m{sv_list\[([^\]]+)\]\.}
               ) {
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
 
-                # Cow is "STRING\0COUNT"
-                push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
-                push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC;", $svidx );
+                my $sv_c_struct = svsect()->get($svidx);
+                my( $xpv, $refcnt, $flags, $safesym ) = split(m{,}, $sv_c_struct);
+                $flags =~ s{^0x}{};
+                $flags &= SVf_IsCOW;
+                $flags &= SVf_IsSTATIC;
+                my ($xpvidx) = $xpv =~ m{xpv_list\[([^\]]+)\]};
+                svsect()->update( $svidx, sprintf( '&xpv_list[%d], %Lu, 0x%x, {%s}', $xpvidx, $refcnt, $flags, $savesym ) );
 
-                # TODO: It would be faster to just update
-                # the flags in the sv_list and length in xpv_list
-                # as it would avoid these lines in the init phase
-                my $svlen = $cur + 2;
-                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
+                # Cow is "STRING\0COUNT"
+                my $len = $cur + 2;
+                my $xpv_c_struct = xpvsect()->get($xpvidx);
+                xpvsect()->update( $xpvidx, sprintf( "%s, {0}, %u, {%u}", cowpv($pv), $cur, $len ) );
             }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );

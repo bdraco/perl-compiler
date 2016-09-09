@@ -37,6 +37,18 @@ sub add {
     push( @{ $self->{'values'} }, @_ );
 }
 
+sub update {
+    my($self, $row, $value) = @_;
+
+    return $self->{'values'}->[$row] = $value;
+}
+
+sub get {
+    my($self, $row) = @_;
+
+    return $self->{'values'}->[$row];
+}
+
 sub remove {
     my $self = shift;
     pop @{ $self->{'values'} };
