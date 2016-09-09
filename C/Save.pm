@@ -2,7 +2,7 @@ package B::C::Save;
 
 use strict;
 
-use B qw(cstring svref_2object SVf_READONLY SVf_PROTECT);
+use B qw(cstring svref_2object);
 use B::C::Config;
 use B::C::File qw( xpvmgsect decl init );
 use B::C::Helpers qw/strlen_flags/;
@@ -123,7 +123,7 @@ sub savepvn {
             # Boyer-Moore table is just after string and its safety-margin \0
             if (
                    $PERL_SUPPORTS_STATIC_FLAG
-                && $cstr ne q{""}
+                && $cstr ne q{""}        # TODO handle empty strings
                 && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
                 && $cur
                 && $dest =~ m{sv_list\[([^\]]+)\]\.}
@@ -132,30 +132,16 @@ sub savepvn {
               ) {
                 my $svidx = $1;
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
+
+                # Cow is "STRING\0COUNT"
                 push @init, sprintf( "%s = %s;", $dest, cowpv($pv) );
                 push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC;", $svidx );
 
-                #push @init, sprintf( "SvFLAGS(&sv_list[%d]) |= SVf_IsCOW | SVf_IsSTATIC | SVs_GMG;", $svidx );
-
-                # Cow is "STRING\0COUNT"
-                # Its not clear if we need to bother setting
-                # SvLEN and everything seems to work without doing so
-                #
-                # my $svlen = $cur + 2;
-                #push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
-            }
-            elsif (0
-                && $cstr eq q{""}
-                && $dest =~ m{sv_list\[([^\]]+)\]\.}
-                && ref $sv eq 'B::PV'
-                && $sv->LEN() == 10
-                && $sv->FLAGS() & SVf_PROTECT
-                && $sv->FLAGS() & SVf_READONLY
-                && $sv->CUR() == 0 ) {
-                my $svidx = $1;
-                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, 0 );
-                push @init, sprintf( '%s = "";',                    $dest );
-                push @init, sprintf( "sv_dump(&sv_list[%d]);",      $svidx );
+                # TODO: It would be faster to just update
+                # the flags in the sv_list and length in xpv_list
+                # as it would avoid these lines in the init phase
+                my $svlen = $cur + 2;
+                push @init, sprintf( "SvLEN_set(&sv_list[%d],%d);", $svidx, $svlen );
             }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
