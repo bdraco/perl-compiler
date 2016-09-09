@@ -20,6 +20,7 @@ our $PERL_SUPPORTS_STATIC_FLAG = 1;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
+
 my %seencow;
 my %strtable;
 
@@ -38,25 +39,30 @@ sub constpv {
 
 # %seencow Lookslike
 # {
-#   'STRING' => [ pv%d, COUNT ]
+#   'STRING' => [ [ pv%d, COUNT ] ], [ [ pv%d, COUNT ], .... ]
 # }
 sub cowpv {
     my $pv = shift;
-    $seencow{$pv}->[COWREFCNT]++;
 
-    return $seencow{$pv}->[COWPV] if $seencow{$pv}->[COWPV];
+    $seencow{$pv} ||= [];
 
-    $seencow{$pv}->[COWREFCNT]++;    # Always have a refcount of 2 or higher to prevent free
-    my $pvsym = sprintf( "pv%d", inc_pv_index() );
-    $seencow{$pv}->[COWPV] = $pvsym;
-    return $seencow{$pv}->[COWPV];
+    if ( !$seencow{$pv}->[-1] || $seencow{$pv}->[-1]->[COWREFCNT] == 255 ) {
+        my $pvsym = sprintf( "pv%d", inc_pv_index() );
+        push @{ $seencow{$pv} }, [ $pvsym, 1 ];    # Always start at 1 so we have a refcount of 2 or higher to prevent free
+
+    }
+
+    $seencow{$pv}->[-1]->[COWREFCNT]++;
+
+    return $seencow{$pv}->[-1]->[COWPV];
 }
 
 sub save_cow_pvs {
     foreach my $pv ( keys %seencow ) {
-        my $cstring = cstring( "$pv\0" . chr( $seencow{$pv}->[COWREFCNT] ) );
-        my $pvsym   = $seencow{$pv}->[0];
-        decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, $cstring ) );
+        foreach my $static_pvs ( @{ $seencow{$pv} } ) {
+            my ( $pvsym, $cowrefcnt ) = @{$static_pvs};
+            decl()->add( sprintf( "Static char %s[] = %s;", $pvsym, cstring( "$pv\0" . chr($cowrefcnt) ) ) );
+        }
     }
 }
 
@@ -119,18 +125,17 @@ sub savepvn {
         else {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
             my $max_string_len = $B::C::max_string_len || 32768;
-            my $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : length( pack "a*", $pv );
+            my $packed_length = length( pack "a*", $pv );
+            $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : $packed_length;
 
             # We cannot COW anything except B::PV because other may store
             # things after \0.  For example
             # Boyer-Moore table is just after string and its safety-margin \0
             if ($B::C::const_strings
                 && $PERL_SUPPORTS_STATIC_FLAG
-                && $cstr ne q{""}        # TODO handle empty strings
                 && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
-                && $cur
                 && $len < $max_string_len
-                && ( !$seencow{$cstr} || $seencow{$cstr}->[COWREFCNT] < 255 )
+                && $packed_length == $cur # !?!: Sometimes $pv eq '' and this is false which results in a crash so we do not cow in this case
                 && $dest =~ m{sv_list\[([^\]]+)\]\.}
               ) {
                 my $svidx = $1;
