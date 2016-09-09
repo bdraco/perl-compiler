@@ -137,17 +137,21 @@ sub savepvn {
                 debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
 
                 my $sv_c_struct = svsect()->get($svidx);
-                my( $xpv, $refcnt, $flags, $savesym ) = split(m{,}, $sv_c_struct);
+                my( $xpv, $refcnt_c, $flags, $savesym_c ) = split(m{\s*,\s*}, $sv_c_struct);
                 $flags =~ s{^0x}{};
-                $flags &= SVf_IsCOW;
-                $flags &= SVf_IsSTATIC;
-                my ($xpvidx) = $xpv =~ m{xpv_list\[([^\]]+)\]};
-                svsect()->update( $svidx, sprintf( '&xpv_list[%d], %Lu, 0x%x, {%s}', $xpvidx, $refcnt, $flags, $savesym ) );
+                $flags = hex($flags);
+                $flags |= SVf_IsCOW;
+                $flags |= SVf_IsSTATIC;
+                my $new_sv = sprintf( '%s, %s, 0x%x, %s', $xpv, $refcnt_c, $flags, cowpv($pv) );
+                svsect()->update( $svidx, $new_sv );
 
                 # Cow is "STRING\0COUNT"
                 my $len = $cur + 2;
+                my ($xpvidx) = $xpv =~ m{xpv_list\[([^\]]+)\]};
                 my $xpv_c_struct = xpvsect()->get($xpvidx);
-                xpvsect()->update( $xpvidx, sprintf( "%s, {0}, %u, {%u}", cowpv($pv), $cur, $len ) );
+                my( $stash_c, $magic_c, $cur_c, $len_c ) = split(m{\s*,\s*}, $xpv_c_struct);
+                my $new_xpv = sprintf( "%s, %s, %u, {%u}", $stash_c, $magic_c, $cur, $len );
+                xpvsect()->update( $xpvidx, $new_xpv );
             }
             else {
                 debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
