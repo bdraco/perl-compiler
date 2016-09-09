@@ -124,7 +124,7 @@ sub savepvn {
             # We cannot COW anything except B::PV because other may store
             # things after \0.  For example
             # Boyer-Moore table is just after string and its safety-margin \0
-            if ($B::C::const_strings 
+            if ($B::C::const_strings
                 && $PERL_SUPPORTS_STATIC_FLAG
                 && $cstr ne q{""}        # TODO handle empty strings
                 && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
