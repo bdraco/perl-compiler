@@ -551,6 +551,15 @@ sub save {
     # cv_undef wants to free it when CvDYNFILE(cv) is true.
     # E.g. DateTime: boot_POSIX. newXS reuses cv if autoloaded. So turn it off globally.
     $CvFLAGS &= ~0x1000;    # CVf_DYNFILE off
+
+    my $CvFILE = 'NULL';
+    unless ($B::C::optimize_cop) {
+        my $file = $cv->FILE();
+        if ($B::C::const_strings && length $file) {
+            $CvFILE = "(char *) " . constpv( $file );
+        }
+    }
+
     my $xpvc = sprintf
 
       # stash magic cur len cvstash start root cvgv cvfile cvpadlist     outside outside_seq cvflags cvdepth
@@ -559,7 +568,7 @@ sub save {
         $cur, $len, "Nullhv",    #CvSTASH later
         $startfield, $$root,
         "0",                     #GV later
-        "NULL",                  #cvfile later (now a HEK)
+        $CvFILE,                  #cvfile later (now a HEK)
         $padlistsym,
         $xcv_outside,            #if main_cv set later
         get_integer_value( $cv->OUTSIDE_SEQ ),
@@ -689,7 +698,7 @@ sub save {
             init()->add( savepvn( "CvFILE($sym)", $cv->FILE ) );
         }
         elsif ($B::C::const_strings && length $file) {
-            init()->add( sprintf( "CvFILE(%s) = (char *) %s;", $sym, constpv( $file ) ) );
+            # Optimized into the struct above.
         }
         else {
             init()->add( sprintf( "CvFILE(%s) = %s;", $sym, cstring( $cv->FILE ) ) );
