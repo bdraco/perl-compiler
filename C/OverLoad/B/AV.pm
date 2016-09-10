@@ -172,8 +172,6 @@ sub save {
                 $i += $count;
             }
             else {    # XXX 5.8.9d Test::NoWarnings has empty values
-                            print STDERR "[$values[$i]]\n";
-
                 $acc .= "\t*svp++ = $svpcast" . ( $values[$i] ? $values[$i] : '&PL_sv_undef' ) . ";\n\t";
             }
         }

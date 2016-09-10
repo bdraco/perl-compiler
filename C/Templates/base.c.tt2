@@ -257,6 +257,12 @@ static void GvSETUP( GV *gv, U32 svflags, U32 gvflags, U32 gvline, U32 svrefcnt,
     return;
 }
 
+static void GvMAGIC_BACKREF( SV *sv, SV *cv ) {
+    sv_magic((SV*)sv, (SV*)cv, '<', 0, 0);
+    CvCVGV_RC_off(cv);
+    return;
+}
+
 static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
     int i;
     for(i=0;i<copcount;i++)
