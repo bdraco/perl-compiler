@@ -257,6 +257,15 @@ static void GvSETUP( GV *gv, U32 svflags, U32 gvflags, U32 gvline, U32 svrefcnt,
     return;
 }
 
+static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
+    int i;
+    for(i=0;i<copcount;i++)
+    {
+        CopSTASH_set(&cop_list[i], hv);
+    }
+    return;
+}
+
 static void perl_init0(pTHX) { /* fixup_ppaddr */
 [% section.init0.output( "    %s\n" ) %]
 };

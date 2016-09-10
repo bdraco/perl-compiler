@@ -12,11 +12,12 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 
+my %seencop;
 my %seencow;
 my %strtable;
 
@@ -31,6 +32,13 @@ sub inc_pv_index {
 
 sub constpv {
     return savepv( shift, 1 );
+}
+
+sub multicop {
+    my($copix, $stash) = @_;
+
+    push @{$seencop{$stash}}, $copix;
+    return;
 }
 
 # %seencow Lookslike
@@ -51,6 +59,14 @@ sub cowpv {
     $seencow{$pv}->[-1]->[COWREFCNT]++;
 
     return $seencow{$pv}->[-1]->[COWPV];
+}
+
+sub save_multicops {
+    foreach my $hv ( keys %seencop ) {
+        my @cops = @{$seencop{$hv}};
+        my $copcount = scalar @cops;
+        init()->add(  sprintf( "MULTICopHV( %s, (const int[]){%s}, %d );", $hv, join(',', @{$seencop{$hv}}), $copcount)   );
+    }
 }
 
 sub save_cow_pvs {
