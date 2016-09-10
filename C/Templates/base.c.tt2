@@ -246,13 +246,13 @@ Static [% section.$sect.typename() %] [% section.$sect.name() %]_list[[% lines %
 [% END %]
 
 static void GvSETUP( GV *gv, U32 svflags, U32 gvflags, U32 gvline, U32 svrefcnt, U32 gvrefcnt ) {
-    SvFLAGS(gv,svflags);
-    GvFLAGS(gv,gvflags);
-    if (gvline != NULL) 
-        GvLINE(gv,gvline);
-    if (svrefcnt != NULL)
+    SvFLAGS(gv) = svflags;
+    GvFLAGS(gv) = gvflags;
+    if (gvline > -1)
+        GvLINE(gv) = gvline;
+    if (svrefcnt > -1)
         SvREFCNT(gv) = svrefcnt;
-    if (gvrefcnt != NULL)
+    if (gvrefcnt)
         GvREFCNT(gv) += gvrefcnt;
     return;
 }
