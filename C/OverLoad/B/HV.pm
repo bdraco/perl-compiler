@@ -220,6 +220,11 @@ sub save {
                 "{",
                 sprintf( "\tHV *hv = %s%s;", $sym =~ /^hv|\(HV/ ? '' : '(HV*)', $sym )
             );
+            my $can_optimize_withMULTIStoreHV = 1;
+            my @hv_store;
+
+            my ($sv_start) = $contents[1] =~ m{\&sv_list\[(\d+)\]};
+            my $sv_cur = $sv_start;
             while (@contents) {
                 my ( $key, $value ) = splice( @contents, 0, 2 );
                 if ($value) {
@@ -230,12 +235,12 @@ sub save {
 
                     # issue 272: if SvIsCOW(sv) && SvLEN(sv) == 0 => sharedhek (key == "")
                     # >= 5.10: SvSHARED_HASH: PV offset to hek_hash
-                    init()->add(
-                        sprintf(
-                            "\thv_store(hv, %s, %d, %s, %s);",
-                            $cstring, $cur, $value, 0
-                        )
-                    );    # !! randomized hash keys
+                    if ($value !~ m{\&sv_list\[$sv_cur\]}) {
+                        $can_optimize_withMULTIStoreHV = 0;
+                    }
+                    $sv_cur++;
+                    push @hv_store,[$cstring,$cur,$value]; 
+
                     debug( hv => "  HV key \"%s\" = %s\n", $key, $value );
                     if (   !$swash_ToCf
                         and $fullname =~ /^utf8::SWASHNEW/
@@ -244,6 +249,22 @@ sub save {
                         $swash_ToCf = $value;
                         verbose("Found PL_utf8_tofold ToCf swash $value");
                     }
+                }
+            }
+            if ($can_optimize_withMULTIStoreHV) {
+                my $keys = join(",", map { $_->[0] } @hv_store);
+                my $sizes = join(",", map { $_->[1] } @hv_store);
+                init()->add(sprintf("\tconst char *xlist[] = {%s};", $keys));
+                init()->add(sprintf("\tMULTIStoreHV(hv, xlist, (const int[]){%s}, %d, %d);", $sizes, scalar @hv_store, $sv_start));
+            } else {
+                foreach my $hv (@hv_store) {
+                    my($cstring,$cur,$value) = @{$hv};
+                    init->add(
+                        sprintf(
+                            "\thv_store(hv, %s, %d, %s, %s);",
+                            $cstring, $cur, $value, 0
+                        )
+                    );   # !! randomized hash keys
                 }
             }
             init()->add("}");

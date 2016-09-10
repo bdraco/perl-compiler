@@ -263,11 +263,20 @@ static void GvMAGIC_BACKREF( SV *sv, SV *cv ) {
     return;
 }
 
+int MULTICopHV_i;
 static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
-    int i;
-    for(i=0;i<copcount;i++)
+    for(MULTICopHV_i=0;MULTICopHV_i<copcount;MULTICopHV_i++)
     {
-        CopSTASH_set(&cop_list[i], hv);
+        CopSTASH_set(&cop_list[MULTICopHV_i], hv);
+    }
+    return;
+}
+
+int MULTIStoreHV_i;
+static void MULTIStoreHV( HV *hv, const char * keys[], const int sizes[], int keycount, int svstart ) {
+    for(MULTIStoreHV_i=0;MULTIStoreHV_i<keycount;MULTIStoreHV_i++)
+    {
+        hv_store(hv, keys[MULTIStoreHV_i], sizes[MULTIStoreHV_i], &sv_list[svstart + MULTIStoreHV_i], 0);
     }
     return;
 }
