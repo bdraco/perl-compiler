@@ -12,13 +12,14 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv save_multisvop_sv/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 
 my %seencop;
 my %seencow;
+my %seensvop_sv;
 my %strtable;
 
 # Two different families of save functions
@@ -41,6 +42,12 @@ sub multicop {
     return;
 }
 
+sub svop_sv { 
+    my($svopix, $svsym) = @_;
+    push @{$seensvop_sv{$svsym}}, $svopix;
+    return;
+}
+
 # %seencow Lookslike
 # {
 #   'STRING' => [ [ pv%d, COUNT ] ], [ [ pv%d, COUNT ], .... ]
@@ -59,6 +66,15 @@ sub cowpv {
     $seencow{$pv}->[-1]->[COWREFCNT]++;
 
     return $seencow{$pv}->[-1]->[COWPV];
+}
+
+sub save_multisvop_sv {
+    foreach my $svsym ( keys %seensvop_sv ) {
+        my @svops = @{$seensvop_sv{$svsym}};
+        my $svopcount = scalar @svops;
+        init()->add(  sprintf( "SVOP_multisetgv( (const int[]){%s}, %d, %s );", join(',', @{$seensvop_sv{$svsym}}), $svopcount, $svsym)   );
+    }
+
 }
 
 sub save_multicops {
