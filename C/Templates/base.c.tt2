@@ -267,7 +267,7 @@ int MULTICopHV_i;
 static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
     for(MULTICopHV_i=0;MULTICopHV_i<copcount;MULTICopHV_i++)
     {
-        CopSTASH_set(&cop_list[MULTICopHV_i], hv);
+        CopSTASH_set(&cop_list[cops[MULTICopHV_i]], hv);
     }
     return;
 }
