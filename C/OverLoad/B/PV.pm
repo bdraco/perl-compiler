@@ -2,12 +2,17 @@ package B::PV;
 
 use strict;
 
-use B qw/SVf_ROK SVf_READONLY cstring SVs_OBJECT/;
+use B qw/SVf_ROK SVf_READONLY cstring SVs_OBJECT SVf_IsCOW/;
 use B::C::Config;
-use B::C::Save qw/savepvn/;
+use B::C::Save qw/savepvn cowpv/;
 use B::C::Save::Hek qw/save_hek/;
 use B::C::File qw/xpvsect svsect init/;
 use B::C::Helpers::Symtable qw/savesym objsym/;
+
+use constant SVf_IsSTATIC => 0x10000000;
+
+our $PERL_SUPPORTS_STATIC_FLAG = 1;
+
 
 sub save {
     my ( $sv, $fullname ) = @_;
@@ -38,6 +43,17 @@ sub save {
         $flags &= ~0x01000000;
         debug( pv => "constpv turn off SVf_FAKE %s %s %s\n", $sym, cstring($pv), $fullname );
     }
+
+    my $max_string_len = $B::C::max_string_len || 32768;
+    if ( $PERL_SUPPORTS_STATIC_FLAG && $B::C::const_strings and !$static and $len < $max_string_len ) {
+        $flags |= SVf_IsCOW;
+        $flags |= SVf_IsSTATIC;
+        $savesym = cowpv($pv);
+        $cur = length( pack "a*", $pv );
+        $len = $cur + 2;
+        $static = 1;
+    }
+
     xpvsect()->comment("stash, magic, cur, len");
     xpvsect()->add( sprintf( "Nullhv, {0}, %u, {%u}", $cur, $len ) );
     svsect()->comment("any, refcnt, flags, sv_u");

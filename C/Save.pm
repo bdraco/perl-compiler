@@ -9,14 +9,10 @@ use B::C::Helpers qw/strlen_flags/;
 use B::C::Save::Hek qw/save_hek/;
 use B::C::File qw/xpvsect svsect/;
 
-use constant SVf_IsSTATIC => 0x10000000;
-
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv save_cow_pvs/;
-
-our $PERL_SUPPORTS_STATIC_FLAG = 1;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
@@ -124,45 +120,15 @@ sub savepvn {
         }
         else {
             my ( $cstr, $len, $utf8 ) = strlen_flags($pv);
-            my $max_string_len = $B::C::max_string_len || 32768;
             my $packed_length = length( pack "a*", $pv );
             $cur ||= ( $sv and ref($sv) and $sv->can('CUR') and ref($sv) ne 'B::GV' ) ? $sv->CUR : $packed_length;
 
             # We cannot COW anything except B::PV because other may store
             # things after \0.  For example
             # Boyer-Moore table is just after string and its safety-margin \0
-            if ($B::C::const_strings
-                && $PERL_SUPPORTS_STATIC_FLAG
-                && ref $sv eq 'B::PV'    # see above for why this can only be B::PV and not a subclass of
-                && $len < $max_string_len
-                && $packed_length == $cur # !?!: Sometimes $pv eq '' and this is false which results in a crash so we do not cow in this case
-                && $dest =~ m{sv_list\[([^\]]+)\]\.}
-              ) {
-                my $svidx = $1;
-                debug( sv => "COW: Saving PV %s:%d to %s", $cstr, $cur, $dest );
-
-                my $sv_c_struct = svsect()->get($svidx);
-                my( $xpv, $refcnt_c, $flags, $savesym_c ) = split(m{\s*,\s*}, $sv_c_struct);
-                $flags =~ s{^0x}{};
-                $flags = hex($flags);
-                $flags |= SVf_IsCOW;
-                $flags |= SVf_IsSTATIC;
-                my $new_sv = sprintf( '%s, %s, 0x%x, %s', $xpv, $refcnt_c, $flags, cowpv($pv) );
-                svsect()->update( $svidx, $new_sv );
-
-                # Cow is "STRING\0COUNT"
-                my $len = $cur + 2;
-                my ($xpvidx) = $xpv =~ m{xpv_list\[([^\]]+)\]};
-                my $xpv_c_struct = xpvsect()->get($xpvidx);
-                my( $stash_c, $magic_c, $cur_c, $len_c ) = split(m{\s*,\s*}, $xpv_c_struct);
-                my $new_xpv = sprintf( "%s, %s, %u, {%u}", $stash_c, $magic_c, $cur, $len );
-                xpvsect()->update( $xpvidx, $new_xpv );
-            }
-            else {
-                debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
-                $cur = 0 if $cstr eq "" and $cur == 7;    # 317
-                push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
-            }
+            debug( sv => "Saving PV %s:%d to %s", $cstr, $cur, $dest );
+            $cur = 0 if $cstr eq "" and $cur == 7;    # 317
+            push @init, sprintf( "%s = savepvn(%s, %u);", $dest, $cstr, $cur );
         }
     }
     return @init;
