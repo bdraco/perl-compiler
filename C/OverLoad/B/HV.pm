@@ -254,7 +254,6 @@ sub save {
             if ($can_optimize_withMULTIStoreHV) {
                 my $keys = join(",", map { $_->[0] } @hv_store);
                 my $sizes = join(",", map { $_->[1] } @hv_store);
-                #init()->add(sprintf("\tconst char *xlist[] = {%s};", $keys));
                 init()->add(sprintf("\tMULTIStoreHV(hv, (const char *[]){%s}, (const int[]){%s}, %d, %d);", $keys, $sizes, scalar @hv_store, $sv_start));
             } else {
                 foreach my $hv (@hv_store) {
