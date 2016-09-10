@@ -654,7 +654,8 @@ sub save {
             }
         }
         else {
-            init()->add( sprintf( "CvOUTSIDE(%s) = (CV*)s\\_%x;", $sym, $xcv_outside ) );
+            # already set above
+            #init()->add( sprintf( "CvOUTSIDE(%s) = (CV*)s\\_%x;", $sym, $xcv_outside ) );
         }
     }
     elsif ( $xcv_outside && ref( $cv->OUTSIDE ) ) {
