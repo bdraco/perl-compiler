@@ -299,38 +299,29 @@ sub save {
     }
     my $gvflags = $gv->GvFLAGS;
 
-    init()->add(
-        sprintf(
-            "SvFLAGS(%s) = 0x%x;%s", $sym, $svflags,
-            debug('flags') ? " /* " . $gv->flagspv . " */" : ""
-        ),
-        sprintf(
-            "GvFLAGS(%s) = 0x%x; %s", $sym, $gvflags,
-            debug('flags') ? "/* " . $gv->flagspv(SVt_PVGV) . " */" : ""
-        )
-    );
-    init()->add(
-        sprintf(
-            'GvLINE(%s) = %d;',
-            $sym,
-            (
-                $gv->LINE > 2147483647    # S32 INT_MAX
-                ? 4294967294 - $gv->LINE
-                : $gv->LINE
-            )
-        )
-    ) unless $is_empty;
+    if ( debug('flags') ){
+        init()->add("/* SvFLAGS: " . $gv->flagspv . " */");
+        init()->add("/* GvFLAGS: " . $gv->flagspv(SVt_PVGV) . " */");
+    }
 
+    my $format_gvline = $is_empty ? 'NULL' : $gv->LINE > 2147483647    # S32 INT_MAX
+                ? 4294967294 - $gv->LINE
+                : $gv->LINE;
+
+    my $format_svrefcnt = 'NULL';
     # walksymtable creates an extra reference to the GV (#197)
     if ( $gv->REFCNT > 1 ) {
-        init()->add( sprintf( "SvREFCNT(%s) = %u;", $sym, $gv->REFCNT ) );
+        $format_svrefcnt = $gv->REFCNT;
     }
-    return $sym if $is_empty;
+    my $format_gvrefcnt = 'NULL';
+    if ( !$is_empty && $gvrefcnt > 1 ) {
+        $format_gvrefcnt = $gvrefcnt - 1;
+    }
 
-    my $gvrefcnt = $gv->GvREFCNT;
-    if ( $gvrefcnt > 1 ) {
-        init()->add( sprintf( "GvREFCNT(%s) += %u;", $sym, $gvrefcnt - 1 ) );
-    }
+    # Templates/base.c.tt2: GvSETUP( gv, SvFLAGS, GvFLAGS, GvLINE, SvREFCNT, GvREFCNT)
+    init()->add("GvSETUP(%s,0x%x,0x%x,%s,%s,%s);", $sym, $svflags, $gvflags, $format_gvline, $format_svrefcnt, $format_gvrefcnt)
+
+    return $sym if $is_empty;
 
     debug( gv => "check which savefields for \"$gvname\"" );
 
