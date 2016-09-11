@@ -259,6 +259,22 @@ SV ** INITAv(AV * av, int count) {
     return svp;
 }
 
+PADNAME ** INITPADNAME(PADNAMELIST *padname, int count) {
+    PADNAME **svp;
+    PADNAMELIST *padnl = padname;
+    Newxz(svp, count, PADNAME *);
+    PadnamelistARRAY(padnl) = svp;
+    return svp;
+}
+
+PAD ** INITPADLIST(PADLIST *pad, int count) {
+    PAD **svp;
+    PADLIST *padl = pad;
+    Newxz(svp, count, PAD *);
+    PadlistARRAY(padl) = svp;
+    return svp;
+}
+
 
 int SVOP_hintgv_i;
 static void SVOP_multisetgv( const int svops[], int svopcount, SV *gv ) {

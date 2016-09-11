@@ -25,13 +25,9 @@ sub add_to_init {
     my $fill1 = $self->fill + 1;
 
     init()->no_split;
-    init()->add( "{", "\tPAD **svp;" );
+    init()->add( "{" );
     init()->add("\tregister int gcount;") if $acc =~ qr{\bgcount\b};    # only if gcount is used
-    init()->add(
-        "\tPADLIST *padl = $sym;",
-        sprintf( "\tNewxz(svp, %d, PAD *);", $fill1 ),
-        "\tPadlistARRAY(padl) = svp;",
-    );
+    init()->add(sprintf("\tPAD **svp = INITPADLIST($sym, %d);", $fill1));
     init()->add( substr( $acc, 0, -2 ) );
     init()->add("}");
     init()->split;
