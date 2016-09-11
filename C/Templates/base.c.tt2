@@ -308,6 +308,23 @@ static void MULTIGvFILE_HEK( HEK *hek, const int gvs[], int gvcount ) {
     return;
 }
 
+PADNAME ** INITPADNAME(PADNAMELIST *padname, int count) {
+    PADNAME **svp;
+    PADNAMELIST *padnl = padname;
+    Newxz(svp, count, PADNAME *);
+    PadnamelistARRAY(padnl) = svp;
+    return svp;
+}
+
+PAD ** INITPADLIST(PADLIST *pad, int count) {
+    PAD **svp;
+    PADLIST *padl = pad;
+    Newxz(svp, count, PAD *);
+    PadlistARRAY(padl) = svp;
+    return svp;
+}
+
+
 static void perl_init0(pTHX) { /* fixup_ppaddr */
 [% section.init0.output( "    %s\n" ) %]
 };
