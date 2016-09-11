@@ -12,14 +12,15 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv save_multisvop_sv/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 
 my %seencop;
 my %seencow;
-my %seensvop_sv;
+my %seen_svop_sv_gvidx;
+my %seen_svop_sv_gv;
 my %strtable;
 
 # Two different families of save functions
@@ -42,9 +43,21 @@ sub multicop {
     return;
 }
 
-sub svop_sv { 
-    my($svopix, $svsym) = @_;
-    push @{$seensvop_sv{$svsym}}, $svopix;
+# Takes a gv index
+sub svop_sv_gvidx {
+    my ( $svopix, $gvidx ) = @_;
+
+    die "svop_sv_gvidx requires a index in the gv_list" if $svopix !~ m{^[0-9]+};
+    push @{ $seen_svop_sv_gvidx{$gvidx} }, $svopix;
+    return;
+}
+
+# Takes a gv symbol
+sub svop_sv_gv {
+    my ( $svopix, $gv ) = @_;
+
+    die "svop_sv_gv requires a GV symbol" if $gv !~ m{SV};
+    push @{ $seen_svop_sv_gv{$gv} }, $svopix;
     return;
 }
 
@@ -68,11 +81,22 @@ sub cowpv {
     return $seencow{$pv}->[-1]->[COWPV];
 }
 
-sub save_multisvop_sv {
-    foreach my $svsym ( keys %seensvop_sv ) {
-        my @svops = @{$seensvop_sv{$svsym}};
+#   svop_list[12148].op_sv = (SV*)PL_defgv;
+sub save_multisvop_sv_gv {
+    foreach my $gvsym ( keys %seen_svop_sv_gv ) {
+        my @svops     = @{ $seen_svop_sv_gv{$gvsym} };
         my $svopcount = scalar @svops;
-        init()->add(  sprintf( "SVOP_multisetgv( (const int[]){%s}, %d, %s );", join(',', @{$seensvop_sv{$svsym}}), $svopcount, $svsym)   );
+        init()->add( sprintf( "SVOP_multisetgv( (const int[]){%s}, %d, %s );", join( ',', @{ $seen_svop_sv_gv{$gvsym} } ), $svopcount, $gvsym ) );
+    }
+
+}
+
+#  svop_list[12148].op_sv = gv_list[IDX];
+sub save_multisvop_sv_gvidx {
+    foreach my $gvidx ( keys %seen_svop_sv_gvidx ) {
+        my @svops     = @{ $seen_svop_sv_gvidx{$gvidx} };
+        my $svopcount = scalar @svops;
+        init()->add( sprintf( "SVOP_multisetgvidx( (const int[]){%s}, %d, %d );", join( ',', @{ $seen_svop_sv_gvidx{$gvidx} } ), $svopcount, $gvidx ) );
     }
 
 }

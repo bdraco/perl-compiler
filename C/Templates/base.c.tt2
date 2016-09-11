@@ -245,13 +245,22 @@ Static [% section.$sect.typename() %] [% section.$sect.name() %]_list[[% lines %
 
 [% END %]
 
-int SVOP_hintgv_i;
-static void SVOP_multisetgv( const int svops[], int svopcount, SV *gv ) {
-    for(SVOP_hintgv_i=0;SVOP_hintgv_i<svopcount;SVOP_hintgv_i++)
-    {
-        svop_list[svops[SVOP_hintgv_i]].op_sv = (SV*)gv;
-    } 
-    return;   
+int SVOP_gvidx_i;
+static void SVOP_multisetgvidx( const int svops[], int svopcount, int gvidx ) {
+  for(SVOP_gvidx_i=0;SVOP_gvidx_i<svopcount;SVOP_gvidx_i++)
+  {
+    svop_list[svops[SVOP_gvidx_i]].op_sv = (SV*)gv_list[gvidx];
+  }
+  return;
+}
+
+int SVOP_gv_i;
+static void SVOP_multisetgv( const int svops[], int svopcount, SV * gv ) {
+  for(SVOP_gv_i=0;SVOP_gv_i<svopcount;SVOP_gv_i++)
+  {
+    svop_list[svops[SVOP_gv_i]].op_sv = (SV*)gv;
+  }
+  return;   
 }
 
 static void GvSETUP( GV *gv, U32 svflags, U32 gvflags, U32 gvline, U32 svrefcnt, U32 gvrefcnt ) {

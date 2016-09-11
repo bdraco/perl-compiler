@@ -6,7 +6,7 @@ use B::C::File qw/svopsect init/;
 use B::C::Config;
 use B::C::Helpers qw/do_labels/;
 use B::C::Helpers::Symtable qw/objsym savesym/;
-use B::C::Save qw/svop_sv/;
+use B::C::Save qw/svop_sv_gvidx svop_sv_gv/;
 
 sub save {
     my ( $op, $level, $fullname ) = @_;
@@ -68,10 +68,16 @@ sub save {
     init()->add( sprintf( "svop_list[%d].op_ppaddr = %s;", $ix, $op->ppaddr ) )
       unless $B::C::optimize_ppaddr;
     unless ($is_const_addr) {
-        svop_sv( $ix, $svsym );
+
+        #   init()->add("svop_list[$ix].op_sv = $svsym;");
+        my ($gvidx) = $svsym =~ m{gv_list\[([^\]]+)\]};
+        if ($gvidx) {
+            svop_sv_gvidx( $ix, $gvidx );
+        }
+        else {
+            svop_sv_gv( $ix, $svsym );
+        }
     }
-    #init()->add("svop_list[$ix].op_sv = $svsym;")
-    #  unless $is_const_addr;
     savesym( $op, "(OP*)&svop_list[$ix]" );
 }
 

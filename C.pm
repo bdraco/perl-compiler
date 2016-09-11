@@ -82,7 +82,7 @@ use B::C::Optimizer::DynaLoader     ();
 use B::C::Optimizer::UnusedPackages ();
 use B::C::OverLoad                  ();
 use B::C::Packages qw/is_package_used mark_package_unused mark_package_used mark_package_removed get_all_packages_used/;
-use B::C::Save qw(constpv savepv set_max_string_len savestashpv save_cow_pvs save_multicops save_multisvop_sv);
+use B::C::Save qw(constpv savepv set_max_string_len savestashpv save_cow_pvs save_multicops save_multisvop_sv_gv save_multisvop_sv_gvidx);
 use B::C::Save::Signals ();
 
 our $gv_index = 0;
@@ -1478,7 +1478,8 @@ sub save_main_rest {
 
     save_multicops();
     save_cow_pvs();
-    save_multisvop_sv();
+    save_multisvop_sv_gv();
+    save_multisvop_sv_gvidx();
     fixup_ppaddr() if ($optimize_ppaddr);
 
     my $remap = 0;
