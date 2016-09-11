@@ -12,11 +12,12 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv save_multisvop_sv multicophint save_multicophints/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv save_multisvop_sv multicophint save_multicophints multigvfile_hek save_multigvfile_hek/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 
+my %seengvfile_hek;
 my %seencop;
 my %seencow;
 my %seensvop_sv;
@@ -34,6 +35,13 @@ sub inc_pv_index {
 
 sub constpv {
     return savepv( shift, 1 );
+}
+
+sub multigvfile_hek {
+    my($gvidx, $hek) = @_;
+
+    push @{$seengvfile_hek{$hek}}, $gvidx;
+    return;
 }
 
 sub multicop {
@@ -83,6 +91,14 @@ sub save_multisvop_sv {
         init()->add(  sprintf( "SVOP_multisetgv( (const int[]){%s}, %d, %s );", join(',', @{$seensvop_sv{$svsym}}), $svopcount, $svsym)   );
     }
 
+}
+
+sub save_multigvfile_hek {
+    foreach my $hek ( keys %seengvfile_hek ) {
+        my @gvs = @{$seengvfile_hek{$hek}};
+        my $gvcount = scalar @gvs;
+        init()->add(  sprintf( "MULTIGvFILE_HEK( %s, (const int[]){%s}, %d );", $hek, join(',', @{$seengvfile_hek{$hek}}), $gvcount)   );
+    }
 }
 
 sub save_multicops {
