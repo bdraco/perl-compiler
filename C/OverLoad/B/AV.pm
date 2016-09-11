@@ -202,37 +202,10 @@ sub save {
         # calloc, only malloc. wmemset'ting the pointer to PL_sv_undef
         # might be faster also.
         elsif ($B::C::av_init) {
-            init()->add(
-                "{ /* Slow array init mode. */",
-                "\tSV **svp;",
-                "\tAV *av = $sym;"
-            );
+            init()->add("{ /* Slow array init mode. */",);
             init()->add("\tregister int gcount;") if $count;
             my $fill1 = $fill < 3 ? 3 : $fill + 1;
-            if ( $fill > -1 ) {
-
-                # Perl_safesysmalloc (= calloc => malloc) or Perl_malloc (= mymalloc)?
-                if ($MYMALLOC) {
-                    init()->add(
-                        sprintf( "\tNewx(svp, %d, SV*);", $fill1 ),
-                        "\tAvALLOC(av) = svp;"
-                    );
-                }
-                else {
-                    # Bypassing Perl_safesysmalloc on darwin fails with "free from wrong pool", test 25.
-                    # So with DEBUGGING perls we have to track memory and use calloc.
-                    init()->add(
-                        "#ifdef PERL_TRACK_MEMPOOL",
-                        sprintf( "\tsvp = (SV**)Perl_safesysmalloc(%d * sizeof(SV*));", $fill1 ),
-                        "#else",
-                        sprintf( "\tsvp = (SV**)malloc(%d * sizeof(SV*));", $fill1 ),
-                        "#endif",
-                        "\tAvALLOC(av) = svp;"
-                    );
-                }
-
-                init()->add("\tAvARRAY(av) = svp;");
-            }
+            init()->add(sprintf("\tSV **svp = INITAv($sym, %d);", $fill1 )) if $fill1 > -1;
             init()->add( substr( $acc, 0, -2 ) );    # AvFILLp already in XPVAV
             init()->add("}");
         }
