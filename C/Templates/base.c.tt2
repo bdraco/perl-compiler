@@ -312,6 +312,15 @@ static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
     return;
 }
 
+int MULTICopHINTHASH_set_i;
+static void MULTICopHINTHASH_set( COPHH* cophh, const int cops[], int copcount ) {
+     for(MULTICopHINTHASH_set_i=0;MULTICopHINTHASH_set_i<copcount;MULTICopHINTHASH_set_i++)
+    {
+        CopHINTHASH_set(&cop_list[cops[MULTICopHINTHASH_set_i]], cophh);
+    }
+    return;
+}
+
 int MULTIStoreHV_i;
 static void MULTIStoreHV( HV *hv, const char * keys[], const int sizes[], int keycount, int svstart ) {
     for(MULTIStoreHV_i=0;MULTIStoreHV_i<keycount;MULTIStoreHV_i++)

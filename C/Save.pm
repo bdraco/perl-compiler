@@ -12,7 +12,7 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv save_multisvop_sv/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv save_multisvop_sv multicophint save_multicophints/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
@@ -20,6 +20,7 @@ use constant COWREFCNT => 1;
 my %seencop;
 my %seencow;
 my %seensvop_sv;
+my %seencophint;
 my %strtable;
 
 # Two different families of save functions
@@ -39,6 +40,13 @@ sub multicop {
     my($copix, $stash) = @_;
 
     push @{$seencop{$stash}}, $copix;
+    return;
+}
+
+sub multicophint {
+    my($copix, $hint) = @_;
+
+    push @{$seencophint{$hint}}, $copix;
     return;
 }
 
@@ -82,6 +90,15 @@ sub save_multicops {
         my @cops = @{$seencop{$hv}};
         my $copcount = scalar @cops;
         init()->add(  sprintf( "MULTICopHV( %s, (const int[]){%s}, %d );", $hv, join(',', @{$seencop{$hv}}), $copcount)   );
+    }
+}
+
+
+sub save_multicophints {
+    foreach my $hint ( keys %seencophint ) {
+        my @cops = @{$seencophint{$hint}};
+        my $copcount = scalar @cops;
+        init()->add(  sprintf( "MULTICopHINTHASH_set( %s, (const int[]){%s}, %d );", $hint, join(',', @{$seencophint{$hint}}), $copcount)   );
     }
 }
 

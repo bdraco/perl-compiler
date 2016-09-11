@@ -5,7 +5,7 @@ use strict;
 use B qw/cstring/;
 use B::C::Config;
 use B::C::File qw/init copsect decl/;
-use B::C::Save qw/constpv savestashpv multicop/;
+use B::C::Save qw/constpv savestashpv multicop multicophint/;
 use B::C::Decimal qw/get_integer_value/;
 use B::C::Helpers::Symtable qw/savesym objsym/;
 use B::C::Helpers qw/read_utf8_string strlen_flags/;
@@ -125,7 +125,8 @@ sub save {
         if ( $hints && $$hints ) {
             if ( exists $cophhtable{$$hints} ) {
                 my $cophh = $cophhtable{$$hints};
-                init()->add( sprintf( "CopHINTHASH_set(&cop_list[%d], %s);", $ix, $cophh ) );
+                multicophint($ix, $cophh)
+                #init()->add( sprintf( "CopHINTHASH_set(&cop_list[%d], %s);", $ix, $cophh ) );
             }
             else {
                 my $hint_hv = $hints->HASH if ref $hints eq 'B::RHE';
@@ -155,7 +156,8 @@ sub save {
                     }
                     $i++;
                 }
-                init()->add( sprintf( "CopHINTHASH_set(&cop_list[%d], %s);", $ix, $cophh ) );
+                multicophint($ix, $cophh)
+                #init()->add( sprintf( "CopHINTHASH_set(&cop_list[%d], %s);", $ix, $cophh ) );
             }
         }
 
