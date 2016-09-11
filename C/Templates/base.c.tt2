@@ -245,6 +245,21 @@ Static [% section.$sect.typename() %] [% section.$sect.name() %]_list[[% lines %
 
 [% END %]
 
+SV ** INITAv(AV * av, int count) {
+/* Bypassing Perl_safesysmalloc on darwin fails with "free from wrong pool", test 25.
+   So with DEBUGGING perls we have to track memory and use calloc. */
+    SV **svp;
+#ifdef PERL_TRACK_MEMPOOL
+    svp = (SV**)Perl_safesysmalloc(count * sizeof(SV*));
+#else
+    svp = (SV**)malloc(count * sizeof(SV*));
+#endif
+    AvALLOC(av) = svp;
+    AvARRAY(av) = svp;
+    return svp;
+}
+
+
 int SVOP_hintgv_i;
 static void SVOP_multisetgv( const int svops[], int svopcount, SV *gv ) {
     for(SVOP_hintgv_i=0;SVOP_hintgv_i<svopcount;SVOP_hintgv_i++)
