@@ -299,6 +299,15 @@ static void MULTIStoreHV( HV *hv, const char * keys[], const int sizes[], int ke
     return;
 }
 
+int MULTIGvFILE_HEK_i;
+static void MULTIGvFILE_HEK( HEK *hek, const int gvs[], int gvcount ) {
+    for(MULTIGvFILE_HEK_i=0;MULTIGvFILE_HEK_i<gvcount;MULTIGvFILE_HEK_i++)
+    {
+        GvFILE_HEK(gv_list[gvs[MULTIGvFILE_HEK_i]]) = share_hek_hek(hek);
+    }
+    return;
+}
+
 static void perl_init0(pTHX) { /* fixup_ppaddr */
 [% section.init0.output( "    %s\n" ) %]
 };

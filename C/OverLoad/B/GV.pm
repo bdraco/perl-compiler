@@ -12,6 +12,7 @@ use B::C::Helpers qw/mark_package get_cv_string strlen_flags/;
 use B::C::Helpers::Symtable qw/objsym savesym/;
 use B::C::Optimizer::ForceHeavy qw/force_heavy/;
 use B::C::Packages qw/mark_package_used/;
+use B::C::Save qw/multigvfile_hek/;
 
 my %gptable;
 
@@ -653,8 +654,15 @@ sub save {
             }
             else {
                 my $file = save_hek( $gv->FILE );
-                init()->add( sprintf( "GvFILE_HEK(%s) = %s;", $sym, $file ) )
-                  if $file ne 'NULL' and !$B::C::optimize_cop;
+                if (!$B::C::optimize_cop) {
+                    my ($hek) = $file =~ m{^share_hek_hek\(([^\)]+)\)$};
+                    my ($gvidx) = $sym =~ m{^gv_list\[([^])]+)\]$};
+                    if ($hek && $gvidx) {
+                        multigvfile_hek($gvidx,$hek);
+                    } else {
+                        init()->add( sprintf( "GvFILE_HEK(%s) = %s;", $sym, $file ) ) if $file ne 'NULL';
+                    }
+                }
             }
 
             # init()->add(sprintf("GvNAME_HEK($sym) = %s;", save_hek($gv->NAME))) if $gv->NAME;
