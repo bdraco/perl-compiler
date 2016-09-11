@@ -245,6 +245,15 @@ Static [% section.$sect.typename() %] [% section.$sect.name() %]_list[[% lines %
 
 [% END %]
 
+int SVOP_hintgv_i;
+static void SVOP_multisetgv( const int svops[], int svopcount, SV *gv ) {
+    for(SVOP_hintgv_i=0;SVOP_hintgv_i<svopcount;SVOP_hintgv_i++)
+    {
+        svop_list[svops[SVOP_hintgv_i]].op_sv = (SV*)gv;
+    } 
+    return;   
+}
+
 static void GvSETUP( GV *gv, U32 svflags, U32 gvflags, U32 gvline, U32 svrefcnt, U32 gvrefcnt ) {
     SvFLAGS(gv) = svflags;
     GvFLAGS(gv) = gvflags;
@@ -254,6 +263,30 @@ static void GvSETUP( GV *gv, U32 svflags, U32 gvflags, U32 gvline, U32 svrefcnt,
         SvREFCNT(gv) = svrefcnt;
     if (gvrefcnt)
         GvREFCNT(gv) += gvrefcnt;
+    return;
+}
+
+static void GvMAGIC_BACKREF( SV *sv, SV *cv ) {
+    sv_magic((SV*)sv, (SV*)cv, '<', 0, 0);
+    CvCVGV_RC_off(cv);
+    return;
+}
+
+int MULTICopHV_i;
+static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
+    for(MULTICopHV_i=0;MULTICopHV_i<copcount;MULTICopHV_i++)
+    {
+        CopSTASH_set(&cop_list[cops[MULTICopHV_i]], hv);
+    }
+    return;
+}
+
+int MULTIStoreHV_i;
+static void MULTIStoreHV( HV *hv, const char * keys[], const int sizes[], int keycount, int svstart ) {
+    for(MULTIStoreHV_i=0;MULTIStoreHV_i<keycount;MULTIStoreHV_i++)
+    {
+        hv_store(hv, keys[MULTIStoreHV_i], sizes[MULTIStoreHV_i], &sv_list[svstart + MULTIStoreHV_i], 0);
+    }
     return;
 }
 

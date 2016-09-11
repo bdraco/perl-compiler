@@ -12,7 +12,7 @@ use B::C::Helpers::Symtable qw/objsym savesym/;
 use B::C::Save qw/savestashpv/;
 
 # maybe need to move to setup/config
-my ( $use_av_undef_speedup, $use_svpop_speedup ) = ( 1, 1 );
+my ( $use_av_undef_speedup, $use_svpop_speedup, $use_padname_speedup, $use_padname_zero_speedup ) = ( 1, 1, 1, 1 );
 my $MYMALLOC = $B::C::Flags::Config{usemymalloc} eq 'define';
 
 sub fill {
@@ -141,6 +141,34 @@ sub save {
                     $count++;
                 }
                 $acc .= "\tfor (gcount=0; gcount<" . ( $count + 1 ) . "; gcount++) {" . " *svp++ = $svpcast&PL_sv_undef; };\n\t";
+                $i += $count;
+            }
+            elsif ( $use_padname_speedup
+                && defined $values[$i]
+                && defined $values[ $i + 1 ]
+                && defined $values[ $i + 2 ]
+                && $values[$i] =~ /^\&padname_list\[(\d+)\]/
+                && $values[ $i + 1 ] eq "&padname_list[" . ( $1 + 1 ) . "]"
+                && $values[ $i + 2 ] eq "&padname_list[" . ( $1 + 2 ) . "]" ) {
+                $count = 0;
+                while ( defined( $values[ $i + $count + 1 ] ) and $values[ $i + $count + 1 ] eq "&padname_list[" . ( $1 + $count + 1 ) . "]" ) {
+                    $count++;
+                }
+                $acc .= "\tfor (gcount=" . $1 . "; gcount<" . ( $1 + $count + 1 ) . "; gcount++) {" . " *svp++ = $svpcast&padname_list[gcount]; };\n\t";
+                $i += $count;
+            }
+            elsif ($use_padname_zero_speedup
+                && defined $values[$i]
+                && defined $values[ $i + 1 ]
+                && defined $values[ $i + 2 ]
+                && $values[$i] eq '&padname_list[0]'
+                && $values[ $i + 1 ] eq '&padname_list[0]'
+                && $values[ $i + 2 ] eq '&padname_list[0]' ) {
+                $count = 0;
+                while ( defined $values[ $i + $count + 1 ] and $values[ $i + $count + 1 ] eq '&padname_list[0]' ) {
+                    $count++;
+                }
+                $acc .= "\tfor (gcount=0; gcount<" . ( $count + 1 ) . "; gcount++) {" . " *svp++ = $svpcast&padname_list[0]; };\n\t";
                 $i += $count;
             }
             else {    # XXX 5.8.9d Test::NoWarnings has empty values

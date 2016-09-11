@@ -5,7 +5,7 @@ use strict;
 use B qw/cstring/;
 use B::C::Config;
 use B::C::File qw/init copsect decl/;
-use B::C::Save qw/constpv savestashpv/;
+use B::C::Save qw/constpv savestashpv multicop/;
 use B::C::Decimal qw/get_integer_value/;
 use B::C::Helpers::Symtable qw/savesym objsym/;
 use B::C::Helpers qw/read_utf8_string strlen_flags/;
@@ -197,7 +197,8 @@ sub save {
 
     if ( !$B::C::optimize_cop ) {
         my $stash = savestashpv( $op->stashpv );
-        init()->add( sprintf( "CopSTASH_set(&cop_list[%d], %s);", $ix, $stash ) );
+        multicop($ix,$stash);
+        #init()->add( sprintf( "CopSTASH_set(&cop_list[%d], %s);", $ix, $stash ) );
         if ( !USE_ITHREADS() ) {
             if (!$B::C::const_strings) {
                 init()->add( sprintf( "CopFILE_set(&cop_list[%d], %s);", $ix, cstring($file) ) );

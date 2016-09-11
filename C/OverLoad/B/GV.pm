@@ -635,10 +635,7 @@ sub save {
             if ( $cvsym and $cvsym !~ /(get_cv|NULL|lexwarn)/ and $gv->MAGICAL ) {
                 my @magic = $gv->MAGIC;
                 foreach my $mg (@magic) {
-                    init()->add(
-                        "sv_magic((SV*)$sym, (SV*)$cvsym, '<', 0, 0);",
-                        "CvCVGV_RC_off($cvsym);"
-                    ) if $mg->TYPE eq '<';
+                    init()->add("GvMAGIC_BACKREF( (SV*)$sym, (SV*)$cvsym );") if $mg->TYPE eq '<';
                 }
             }
         }
