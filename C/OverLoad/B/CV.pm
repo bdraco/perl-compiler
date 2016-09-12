@@ -8,7 +8,7 @@ use B qw/cstring svref_2object CVf_ANON CVf_ANONCONST CVf_CONST main_cv SVf_ROK 
 use B::C::Config;
 use B::C::Decimal qw/get_integer_value/;
 use B::C::Packages qw/is_package_used/;
-use B::C::Save qw/savepvn constpv/;
+use B::C::Save qw/savepvn constpv multi_cvstash/;
 use B::C::Save::Hek qw/save_hek/;
 use B::C::File qw/init init2 decl svsect xpvcvsect symsect/;
 use B::C::Helpers qw/get_cv_string strlen_flags set_curcv/;
@@ -712,8 +712,13 @@ sub save {
         $stash->save($fullname);
 
         # $sym fixed test 27
-        init()->add( sprintf( "CvSTASH_set((CV*)%s, s\\_%x);", $sym, $$stash ) );
+        my ($svidx) = $sym =~ m{^\&sv_list\[([^\]]+)\]$};
 
+        if ($svidx) {
+          multi_cvstash($svidx, sprintf("s\\_%x", $$stash));
+        } else {
+          init()->add( sprintf( "CvSTASH_set((CV*)%s, s\\_%x);", $sym, $$stash ) );
+        }
         # 5.18 bless does not inc sv_objcount anymore. broken by ddf23d4a1ae (#208)
         # We workaround this 5.18 de-optimization by adding it if at least a DESTROY
         # method exists.

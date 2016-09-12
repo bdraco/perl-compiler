@@ -82,7 +82,7 @@ use B::C::Optimizer::DynaLoader     ();
 use B::C::Optimizer::UnusedPackages ();
 use B::C::OverLoad                  ();
 use B::C::Packages qw/is_package_used mark_package_unused mark_package_used mark_package_removed get_all_packages_used/;
-use B::C::Save qw(constpv savepv set_max_string_len savestashpv save_cow_pvs save_multicop_filegvidx save_multicop_stash  save_multisvop_sv_gv save_multisvop_sv_gvidx save_multigvfile_hek);
+use B::C::Save qw(constpv savepv set_max_string_len savestashpv save_cow_pvs save_multicop_filegvidx save_multicop_stash  save_multicv_stash save_multisvop_sv_gv save_multisvop_sv_gvidx save_multigvfile_hek);
 use B::C::Save::Signals ();
 
 our $gv_index = 0;
@@ -1479,6 +1479,7 @@ sub save_main_rest {
     save_multigvfile_hek();
     save_multicop_filegvidx();
     save_multicop_stash();
+    save_multicv_stash();
     save_cow_pvs();
     save_multisvop_sv_gv();
     save_multisvop_sv_gvidx();

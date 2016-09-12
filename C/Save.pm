@@ -12,12 +12,13 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek multi_cvstash save_multicv_stash/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 
 my %seengvfile_hek;
+my %seencv_stash;
 my %seencop_stash;
 my %seencop_filegvidx;
 my %seencow;
@@ -56,6 +57,14 @@ sub multicop_stash {
     my($copix, $stash) = @_;
 
     push @{$seencop_stash{$stash}}, $copix;
+    return;
+}
+
+sub multi_cvstash {
+    my($svidx, $stash) = @_;
+
+    die "multi_cvstash requires a index in the sv_list" if $svidx !~ m{^[0-9]+};
+    push @{$seencv_stash{$stash}}, $svidx;
     return;
 }
 
@@ -140,6 +149,15 @@ sub save_multicop_filegvidx {
         init()->add(  sprintf( "MULTICopGVIDX( %d, (const int[]){%s}, %d );", $gvidx, join(',', @{$seencop_filegvidx{$gvidx}}), $copcount)   );
     }
 }
+
+sub save_multicv_stash {
+    foreach my $hv ( keys %seencv_stash ) {
+        my @cvs = @{$seencv_stash{$hv}};
+        my $cvcount = scalar @cvs;
+        init()->add(  sprintf( "MULTICvSTASH_set( %s, (const int[]){%s}, %d );", $hv, join(',', @{$seencv_stash{$hv}}), $cvcount)   );
+    }
+}
+
 
 sub save_cow_pvs {
     foreach my $pv ( keys %seencow ) {

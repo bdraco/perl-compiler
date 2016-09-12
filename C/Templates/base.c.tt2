@@ -318,6 +318,15 @@ static void MULTICopGVIDX( int gvidx, const int cops[], int copcount ) {
     return;
 }
 
+int MULTICvSTASH_i;
+static void MULTICvSTASH_set( HV *hv, const int cvs[], int cvcount ) {
+    for(MULTICvSTASH_i=0;MULTICvSTASH_i<cvcount;MULTICvSTASH_i++)
+    {
+        CvSTASH_set((CV*)&sv_list[cvs[MULTICvSTASH_i]], hv);
+    }
+    return;
+}
+
 
 int MULTIStoreHV_i;
 static void MULTIStoreHV( HV *hv, const char * keys[], const int sizes[], int keycount, int svstart ) {
