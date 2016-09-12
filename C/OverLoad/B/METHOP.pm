@@ -7,6 +7,7 @@ use B::C::File qw( methopsect init );
 use B::C::Config;
 use B::C::Helpers::Symtable qw/objsym savesym/;
 use B::C::Helpers qw/do_labels/;
+use B::C::Save qw/multi_svrefcnt_inc_simple_nn/;
 
 sub save {
     my ( $op, $level ) = @_;
@@ -23,7 +24,9 @@ sub save {
     my $ix = methopsect()->index + 1;
     my $rclass = USE_ITHREADS() ? $op->rclass : $op->rclass->save("op_rclass_sv");
     if ( $rclass =~ /^&sv_list/ ) {
-        init()->add( sprintf( "SvREFCNT_inc_simple_NN(%s); /* methop_list[%d].op_rclass_sv */", $rclass, $ix ) );
+      my ($svidx) = $rclass =~ m{^\&sv_list\[([^\]]+)\]$};
+      multi_svrefcnt_inc_simple_nn($svidx);
+      #  init()->add( sprintf( "SvREFCNT_inc_simple_NN(%s); /* methop_list[%d].op_rclass_sv */", $rclass, $ix ) );
 
         # Put this simple PV into the PL_stashcache, it has no STASH,
         # and initialize the method cache.
@@ -32,7 +35,9 @@ sub save {
     }
     my $first = $op->name eq 'method' ? $op->first->save : $op->meth_sv->save;
     if ( $first =~ /^&sv_list/ ) {
-        init()->add( sprintf( "SvREFCNT_inc_simple_NN(%s); /* methop_list[%d].op_meth_sv */", $first, $ix ) );
+      my ($svidx) = $first =~ m{^\&sv_list\[([^\]]+)\]$};
+      multi_svrefcnt_inc_simple_nn($svidx);
+       # init()->add( sprintf( "SvREFCNT_inc_simple_NN(%s); /* methop_list[%d].op_meth_sv */", $first, $ix ) );
     }
 
     methopsect()->add( sprintf( $s, $op->_save_common, $first, $rclass ) );

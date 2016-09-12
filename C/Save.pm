@@ -12,7 +12,7 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_lexwarn multicop_lexwarn save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek multi_cvstash save_multicv_stash/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_lexwarn multicop_lexwarn save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek multi_cvstash save_multicv_stash multi_svrefcnt_inc_simple_nn save_multi_svrefcnt_inc_simple_nn/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
@@ -25,6 +25,7 @@ my %seencop_lexwarn;
 my %seencow;
 my %seen_svop_sv_gvidx;
 my %seen_svop_sv_gv;
+my @seen_multi_svrefcnt_inc_simple_nn;
 my %strtable;
 
 # Two different families of save functions
@@ -38,6 +39,12 @@ sub inc_pv_index {
 
 sub constpv {
     return savepv( shift, 1 );
+}
+
+sub multi_svrefcnt_inc_simple_nn {
+    my($svidx) = @_;
+    push @seen_multi_svrefcnt_inc_simple_nn, $svidx;
+    return;
 }
 
 sub multigvfile_hek {
@@ -172,6 +179,11 @@ sub save_multicv_stash {
         my $cvcount = scalar @cvs;
         init()->add(  sprintf( "MULTICvSTASH_set( %s, (const int[]){%s}, %d );", $hv, join(',', @{$seencv_stash{$hv}}), $cvcount)   );
     }
+}
+
+sub save_multi_svrefcnt_inc_simple_nn {
+    my $svcount = scalar @seen_multi_svrefcnt_inc_simple_nn;
+    init()->add( sprintf( "MULTISvREFCNT_inc_simple_NN( (const int[]){%s}, %d );", join( ',', @seen_multi_svrefcnt_inc_simple_nn ), $svcount ) );
 }
 
 
