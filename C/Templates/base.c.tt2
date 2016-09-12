@@ -318,15 +318,6 @@ static void MULTICopGVIDX( int gvidx, const int cops[], int copcount ) {
     return;
 }
 
-int MULTICoplexwarn_i;
-static void MULTICoplexwarn( const char *lexwarn, const int cops[], int copcount ) {
-    for(MULTICoplexwarn_i=0;MULTICoplexwarn_i<copcount;MULTICoplexwarn_i++)
-    {
-        cop_list[cops[MULTICoplexwarn_i]].cop_warnings = (STRLEN*)savesharedpvn((const char*)lexwarn, sizeof(lexwarn));
-    }
-    return;
-}
-
 int MULTISvREFCNT_inc_simple_NN_i;
 static void MULTISvREFCNT_inc_simple_NN( const int svs[], int svcount ) {
     for(MULTISvREFCNT_inc_simple_NN_i=0;MULTISvREFCNT_inc_simple_NN_i<svcount;MULTISvREFCNT_inc_simple_NN_i++)

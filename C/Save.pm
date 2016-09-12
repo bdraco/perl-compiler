@@ -12,7 +12,7 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_lexwarn multicop_lexwarn save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek multi_cvstash save_multicv_stash multi_svrefcnt_inc_simple_nn save_multi_svrefcnt_inc_simple_nn/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek multi_cvstash save_multicv_stash multi_svrefcnt_inc_simple_nn save_multi_svrefcnt_inc_simple_nn/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
@@ -21,7 +21,6 @@ my %seengvfile_hek;
 my %seencv_stash;
 my %seencop_stash;
 my %seencop_filegvidx;
-my %seencop_lexwarn;
 my %seencow;
 my %seen_svop_sv_gvidx;
 my %seen_svop_sv_gv;
@@ -58,13 +57,6 @@ sub multicop_filegvidx {
     my($copix, $gvidx) = @_;
 
     push @{$seencop_filegvidx{$gvidx}}, $copix;
-    return;
-}
-
-sub multicop_lexwarn {
-    my($copix, $lexwarn) = @_;
-
-    push @{$seencop_lexwarn{$lexwarn}}, $copix;
     return;
 }
 
@@ -162,14 +154,6 @@ sub save_multicop_filegvidx {
         my @cops = @{$seencop_filegvidx{$gvidx}};
         my $copcount = scalar @cops;
         init()->add(  sprintf( "MULTICopGVIDX( %d, (const int[]){%s}, %d );", $gvidx, join(',', @{$seencop_filegvidx{$gvidx}}), $copcount)   );
-    }
-}
-
-sub save_multicop_lexwarn {
-    foreach my $lexwarn ( keys %seencop_lexwarn ) {
-        my @cops = @{$seencop_lexwarn{$lexwarn}};
-        my $copcount = scalar @cops;
-        init()->add(  sprintf( "MULTICoplexwarn( %s, (const int[]){%s}, %d );", $lexwarn, join(',', @{$seencop_lexwarn{$lexwarn}}), $copcount)   );
     }
 }
 
