@@ -48,8 +48,6 @@ sub multigvfile_hek {
 sub multicop_filegvidx {
     my($copix, $gvidx) = @_;
 
-print STDERR "[multicop_filegvidx][$copix][$gvidx]\n";
-
     push @{$seencop_filegvidx{$gvidx}}, $copix;
     return;
 }
