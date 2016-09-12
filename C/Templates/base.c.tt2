@@ -309,6 +309,16 @@ static void MULTICopHV( HV *hv, const int cops[], int copcount ) {
     return;
 }
 
+int MULTICopGVIDX_i;
+static void MULTICopGVIDX( int gvidx, const int cops[], int copcount ) {
+    for(MULTICopGVIDX_i=0;MULTICopGVIDX_i<copcount;MULTICopGVIDX_i++)
+    {
+        CopFILEGV_set(&cop_list[cops[MULTICopGVIDX_i]], gv_list[gvidx]);
+    }
+    return;
+}
+
+
 int MULTIStoreHV_i;
 static void MULTIStoreHV( HV *hv, const char * keys[], const int sizes[], int keycount, int svstart ) {
     for(MULTIStoreHV_i=0;MULTIStoreHV_i<keycount;MULTIStoreHV_i++)

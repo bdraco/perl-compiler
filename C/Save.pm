@@ -12,13 +12,14 @@ use B::C::File qw/xpvsect svsect/;
 use Exporter ();
 our @ISA = qw(Exporter);
 
-our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicops multicop svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek/;
+our @EXPORT_OK = qw/savepvn constpv savepv inc_pv_index set_max_string_len savestash_flags savestashpv cowpv save_cow_pvs save_multicop_stash save_multicop_filegvidx multicop_filegvidx multicop_stash svop_sv_gvidx svop_sv_gv save_multisvop_sv_gv save_multisvop_sv_gvidx multigvfile_hek save_multigvfile_hek/;
 
 use constant COWPV     => 0;
 use constant COWREFCNT => 1;
 
 my %seengvfile_hek;
-my %seencop;
+my %seencop_stash;
+my %seencop_filegvidx;
 my %seencow;
 my %seen_svop_sv_gvidx;
 my %seen_svop_sv_gv;
@@ -44,10 +45,19 @@ sub multigvfile_hek {
     return;
 }
 
-sub multicop {
+sub multicop_filegvidx {
+    my($copix, $gvidx) = @_;
+
+print STDERR "[multicop_filegvidx][$copix][$gvidx]\n";
+
+    push @{$seencop_filegvidx{$gvidx}}, $copix;
+    return;
+}
+
+sub multicop_stash {
     my($copix, $stash) = @_;
 
-    push @{$seencop{$stash}}, $copix;
+    push @{$seencop_stash{$stash}}, $copix;
     return;
 }
 
@@ -117,11 +127,19 @@ sub save_multigvfile_hek {
     }
 }
 
-sub save_multicops {
-    foreach my $hv ( keys %seencop ) {
-        my @cops = @{$seencop{$hv}};
+sub save_multicop_stash {
+    foreach my $hv ( keys %seencop_stash ) {
+        my @cops = @{$seencop_stash{$hv}};
         my $copcount = scalar @cops;
-        init()->add(  sprintf( "MULTICopHV( %s, (const int[]){%s}, %d );", $hv, join(',', @{$seencop{$hv}}), $copcount)   );
+        init()->add(  sprintf( "MULTICopHV( %s, (const int[]){%s}, %d );", $hv, join(',', @{$seencop_stash{$hv}}), $copcount)   );
+    }
+}
+
+sub save_multicop_filegvidx {
+    foreach my $gvidx ( keys %seencop_filegvidx ) {
+        my @cops = @{$seencop_filegvidx{$gvidx}};
+        my $copcount = scalar @cops;
+        init()->add(  sprintf( "MULTICopGVIDX( %d, (const int[]){%s}, %d );", $gvidx, join(',', @{$seencop_filegvidx{$gvidx}}), $copcount)   );
     }
 }
 
