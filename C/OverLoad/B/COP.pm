@@ -5,7 +5,7 @@ use strict;
 use B qw/cstring/;
 use B::C::Config;
 use B::C::File qw/init copsect decl/;
-use B::C::Save qw/constpv savestashpv multicop_stash multicop_filegvidx/;
+use B::C::Save qw/constpv savestashpv multicop_stash multicop_filegvidx multicop_lexwarn/;
 use B::C::Decimal qw/get_integer_value/;
 use B::C::Helpers::Symtable qw/savesym objsym/;
 use B::C::Helpers qw/read_utf8_string strlen_flags/;
@@ -176,7 +176,8 @@ sub save {
             # which is not the address which will be freed in S_cop_free.
             # Need to use old-style PerlMemShared_, see S_cop_free in op.c (#362)
             # lexwarn<n> might be also be STRLEN* 0
-            init()->add( sprintf( "%s = (STRLEN*)savesharedpvn((const char*)%s, sizeof(%s));", $dest, $copw, $copw ) );
+            multicop_lexwarn($ix, $copw);   
+            #init()->add( sprintf( "%s = (STRLEN*)savesharedpvn((const char*)%s, sizeof(%s));", $dest, $copw, $copw ) );
         }
     }
     else {
